@@ -9,3 +9,4 @@ opentelemetry-exporter-otlp
 prometheus-fastapi-instrumentator
 python-json-logger
 python-logging-loki
+redis

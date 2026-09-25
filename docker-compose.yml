@@ -9,7 +9,17 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-sentryops}
     ports:
       - "5432:5432"
-    volumes:
+      fault-injection:
+    build: ./fault-injection
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentryops} -d ${POSTGRES_DB:-sentryops}"]
@@ -21,7 +31,17 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    volumes:
+      fault-injection:
+    build: ./fault-injection
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -33,14 +53,34 @@ services:
     image: prom/prometheus:latest
     ports:
       - "9090:9090"
-    volumes:
+      fault-injection:
+    build: ./fault-injection
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   loki:
     image: grafana/loki:latest
     ports:
       - "3100:3100"
-    volumes:
+      fault-injection:
+    build: ./fault-injection
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
       - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
     command: -config.file=/etc/loki/local-config.yaml
 
@@ -60,7 +100,17 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    volumes:
+      fault-injection:
+    build: ./fault-injection
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
@@ -138,6 +188,17 @@ services:
       - loki
       - jaeger
 
+  fault-injection:
+    build: ./fault-injection
+    ports:
+      - "8005:8005"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:
+
