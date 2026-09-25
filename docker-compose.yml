@@ -9,17 +9,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-sentryops}
     ports:
       - "5432:5432"
-      fault-injection:
-    build: ./fault-injection
-    ports:
-      - "8005:8005"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-
-volumes:
+    volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentryops} -d ${POSTGRES_DB:-sentryops}"]
@@ -31,17 +21,7 @@ volumes:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-      fault-injection:
-    build: ./fault-injection
-    ports:
-      - "8005:8005"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-
-volumes:
+    volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -53,34 +33,14 @@ volumes:
     image: prom/prometheus:latest
     ports:
       - "9090:9090"
-      fault-injection:
-    build: ./fault-injection
-    ports:
-      - "8005:8005"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-
-volumes:
+    volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   loki:
     image: grafana/loki:latest
     ports:
       - "3100:3100"
-      fault-injection:
-    build: ./fault-injection
-    ports:
-      - "8005:8005"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-
-volumes:
+    volumes:
       - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
     command: -config.file=/etc/loki/local-config.yaml
 
@@ -100,23 +60,16 @@ volumes:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      fault-injection:
-    build: ./fault-injection
-    ports:
-      - "8005:8005"
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-
-volumes:
+    volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
-      - prometheus
-      - loki
-      - jaeger
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      jaeger:
+        condition: service_started
 
   api-gateway:
     build: ./microservices/api-gateway
@@ -127,9 +80,12 @@ volumes:
       - LOKI_URL=http://loki:3100/loki/api/v1/push
       - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
-      - order-service
-      - loki
-      - jaeger
+      order-service:
+        condition: service_started
+      loki:
+        condition: service_started
+      jaeger:
+        condition: service_started
 
   order-service:
     build: ./microservices/order-service
@@ -142,10 +98,14 @@ volumes:
       - LOKI_URL=http://loki:3100/loki/api/v1/push
       - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
-      - payment-service
-      - notification-service
-      - loki
-      - jaeger
+      payment-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      loki:
+        condition: service_started
+      jaeger:
+        condition: service_started
       postgres:
         condition: service_healthy
 
@@ -157,10 +117,15 @@ volumes:
       - DB_HOST=postgres
       - LOKI_URL=http://loki:3100/loki/api/v1/push
       - OTLP_ENDPOINT=http://jaeger:4317
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
-      - loki
-      - jaeger
+      loki:
+        condition: service_started
+      jaeger:
+        condition: service_started
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   notification-service:
@@ -172,8 +137,10 @@ volumes:
       - LOKI_URL=http://loki:3100/loki/api/v1/push
       - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
-      - loki
-      - jaeger
+      loki:
+        condition: service_started
+      jaeger:
+        condition: service_started
       redis:
         condition: service_healthy
 
@@ -185,8 +152,10 @@ volumes:
       - LOKI_URL=http://loki:3100/loki/api/v1/push
       - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
-      - loki
-      - jaeger
+      loki:
+        condition: service_started
+      jaeger:
+        condition: service_started
 
   fault-injection:
     build: ./fault-injection
@@ -196,6 +165,16 @@ volumes:
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       redis:
+        condition: service_healthy
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://sentryops:sentryops@postgres:5432/sentryops
+    depends_on:
+      postgres:
         condition: service_healthy
 
 volumes:

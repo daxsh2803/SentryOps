@@ -57,3 +57,17 @@ Each created fault includes strongly-typed ground_truth_root_cause metadata. Thi
 6. Stop fault: POST http://localhost:8005/faults/{fault_id}/cleanup.
 
 **Note**: Phase 4 AI Agents, RAG, and Incident backend workflows remain intentionally deferred.
+
+## Phase 4 (Incident Management Backend)
+This phase introduces the core database and FastAPI foundation for the Incident Management Lifecycle. It establishes data persistence meant to be orchestrated by LangGraph in Phase 5.
+
+### Features
+- **PostgreSQL Persistence**: Schema includes Incident, IncidentEvent, Evidence, AgentExecution, RootCause, Remediation, Approval, Execution, and Verification tables (managed with SQLAlchemy).
+- **Incident Creation API**: Manually tracks incident statuses, faults, and severities through endpoints like POST /incidents and GET /incidents/{id}.
+- **Incident Timeline**: A chronological history of events like INCIDENT_CREATED and INVESTIGATION_STARTED.
+- **Evidence Storage**: API structure allowing metrics, traces, and logs to be formally attached to incidents for later RCA evaluation.
+- **Investigation Lifecycle**: Basic state machines enforcing DETECTED -> INVESTIGATING -> MITIGATING workflows.
+
+### Note on Phase 4 Limitations
+- Phase 4 is **data-only**. AI, RCA, automated remediations, and LangGraph pipelines have explicitly NOT been introduced yet.
+- Vector retrieval, Embeddings, and pgvector are deferred.
