@@ -29,14 +29,57 @@ services:
       timeout: 5s
       retries: 5
 
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+
   api-gateway:
     build: ./microservices/api-gateway
     ports:
       - "8000:8000"
     environment:
       - ORDER_SERVICE_URL=http://order-service:8001
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
       - order-service
+      - loki
+      - jaeger
 
   order-service:
     build: ./microservices/order-service
@@ -46,9 +89,13 @@ services:
       - PAYMENT_SERVICE_URL=http://payment-service:8002
       - NOTIFICATION_SERVICE_URL=http://notification-service:8003
       - DB_HOST=postgres
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
       - payment-service
       - notification-service
+      - loki
+      - jaeger
       postgres:
         condition: service_healthy
 
@@ -58,7 +105,11 @@ services:
       - "8002:8002"
     environment:
       - DB_HOST=postgres
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
+      - loki
+      - jaeger
       postgres:
         condition: service_healthy
 
@@ -68,7 +119,11 @@ services:
       - "8003:8003"
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - OTLP_ENDPOINT=http://jaeger:4317
     depends_on:
+      - loki
+      - jaeger
       redis:
         condition: service_healthy
 
@@ -76,6 +131,12 @@ services:
     build: ./microservices/user-service
     ports:
       - "8004:8004"
+    environment:
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - OTLP_ENDPOINT=http://jaeger:4317
+    depends_on:
+      - loki
+      - jaeger
 
 volumes:
   postgres_data:

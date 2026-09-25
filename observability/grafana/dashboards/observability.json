@@ -1,0 +1,17 @@
+{
+  "title": "SentryOps Observability",
+  "panels": [
+    {
+      "title": "Request Rate (per minute)",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(http_requests_total[1m])) by (app)", "legendFormat": "{{app}}"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "title": "Error Rate (5xx)",
+      "type": "timeseries",
+      "targets": [{"expr": "sum(rate(http_requests_total{status=~\"5..\"}[1m])) by (app)", "legendFormat": "{{app}}"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    }
+  ]
+}

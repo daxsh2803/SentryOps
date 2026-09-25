@@ -1,5 +1,4 @@
 import httpx
-import pytest
 
 def test_api_gateway_health():
     r = httpx.get('http://localhost:8000/health')
@@ -30,3 +29,8 @@ def test_order_flow():
     assert data['status'] == 'completed'
     assert 'order_id' in data
 
+def test_metrics_endpoints():
+    for port in [8000, 8001, 8002, 8003, 8004]:
+        r = httpx.get(f'http://localhost:{port}/metrics')
+        assert r.status_code == 200
+        assert 'http_requests_total' in r.text
