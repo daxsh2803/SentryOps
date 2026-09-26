@@ -209,3 +209,95 @@ def reject_remediation(incident_id: str, payload: ApprovalCreate, db: Session = 
     db.commit()
     
     return {"status": "REJECTED", "remediation_id": approval.remediation_id}
+from app.ai.graph import graph
+from app.ai.state import InvestigationState
+from app.schemas.all import AIInvestigationResponse
+from app.models.all import AgentExecution, RootCause
+
+@router.post('/incidents/{incident_id}/ai-investigate', response_model=AIInvestigationResponse)
+def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
+    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+        
+    incident.status = IncidentStatus.INVESTIGATING
+    db.commit()
+
+    initial_state = {
+        "incident_id": incident.incident_id,
+        "db_incident_id": incident.id,
+        "status": incident.status.value,
+        "severity": incident.severity.value,
+        "affected_service": incident.affected_service or "",
+        "fault_type": incident.fault_type or "",
+        "incident_context": incident.description or "",
+        "investigation_plan": "",
+        "log_findings": [],
+        "metric_findings": [],
+        "evidence": [],
+        "root_cause": "",
+        "root_cause_confidence": 0.0,
+        "root_cause_evidence_ids": [],
+        "errors": [],
+        "timeline": ["AI_INVESTIGATION_STARTED"]
+    }
+    
+    final_state = graph.invoke(initial_state)
+    final_state["timeline"].append("AI_INVESTIGATION_COMPLETED")
+    
+    # Persist agent executions based on timeline
+    agents_run = ["IncidentManager", "LogAgent", "MetricsAgent", "RCAAgent"]
+    for agent in agents_run:
+        exec_record = AgentExecution(
+            incident_id=incident.id,
+            agent_name=agent,
+            status="COMPLETED",
+            input_summary="Triggered by orchestration",
+            output_summary=f"Completed {agent} phase"
+        )
+        db.add(exec_record)
+
+    # Persist evidence
+    for ev in final_state.get("evidence", []):
+        db_ev = Evidence(
+            incident_id=incident.id,
+            evidence_id=ev["evidence_id"],
+            evidence_type=ev["evidence_type"],
+            source=ev["source"],
+            service=ev["service"],
+            summary=ev["summary"],
+            payload=ev.get("payload", {}),
+            confidence=ev.get("confidence")
+        )
+        db.add(db_ev)
+
+    # Persist timeline
+    for event_str in final_state["timeline"]:
+        db_event = IncidentEvent(
+            incident_id=incident.id,
+            event_type=event_str.split(":")[0],
+            source="ai-investigator",
+            message=event_str
+        )
+        db.add(db_event)
+        
+    # Persist root cause
+    if final_state.get("root_cause"):
+        db_rc = RootCause(
+            incident_id=incident.id,
+            root_cause=final_state["root_cause"],
+            confidence=final_state["root_cause_confidence"],
+            evidence_ids=final_state["root_cause_evidence_ids"],
+            status="IDENTIFIED"
+        )
+        db.add(db_rc)
+
+    db.commit()
+
+    return AIInvestigationResponse(
+        incident_id=incident_id,
+        status="INVESTIGATING",
+        timeline=final_state["timeline"],
+        errors=final_state["errors"],
+        root_cause=final_state.get("root_cause")
+    )

@@ -2,9 +2,9 @@ import httpx
 import pytest
 import time
 
-FAULT_API = "http://localhost:8005"
-PAYMENT_API = "http://localhost:8002"
-ORDER_API = "http://localhost:8000"
+FAULT_API = "http://127.0.0.1:8005"
+PAYMENT_API = "http://127.0.0.1:8002"
+ORDER_API = "http://127.0.0.1:8000"
 
 def test_fault_registry():
     r = httpx.get(f"{FAULT_API}/faults/types")

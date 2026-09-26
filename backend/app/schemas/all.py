@@ -64,3 +64,10 @@ class ApprovalResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class AIInvestigationResponse(BaseModel):
+    incident_id: str
+    status: str
+    timeline: List[str]
+    errors: List[str]
+    root_cause: Optional[str] = None

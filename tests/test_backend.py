@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-BACKEND_API = "http://localhost:8080"
+BACKEND_API = "http://127.0.0.1:8080"
 
 def test_backend_health():
     r = httpx.get(f"{BACKEND_API}/health")

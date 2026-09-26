@@ -71,3 +71,18 @@ This phase introduces the core database and FastAPI foundation for the Incident 
 ### Note on Phase 4 Limitations
 - Phase 4 is **data-only**. AI, RCA, automated remediations, and LangGraph pipelines have explicitly NOT been introduced yet.
 - Vector retrieval, Embeddings, and pgvector are deferred.
+
+## Phase 5 (Initial AI Agent Orchestration)
+This phase introduces the first working AI investigation pipeline using LangGraph orchestration for Incident Manager, Log Agent, Metrics Agent, and RCA Agent. The pipeline must integrate with the existing Phase 1-4 infrastructure.
+
+### Features
+- **LangGraph Orchestration**: Introduced a graph connecting an IncidentManager node to parallel LogAgent and MetricsAgent nodes, terminating at an RCAAgent node.
+- **Agent Integration**: 
+  - LogAgent querying the existing loki endpoint.
+  - MetricsAgent querying the existing prometheus endpoint.
+  - RCAAgent utilizing langchain-core with mock models to deterministically synthesize evidence.
+- **Investigation Endpoint**: Exposes POST /incidents/{incident_id}/ai-investigate which starts the orchestration workflow and saves execution footprints (Timeline, Evidence, RCA).
+
+### Limitations
+- The LLM integration defaults to a deterministic MockChatModel to guarantee CI consistency and allow testing without an LLM key.
+- Remediations, Risk Engines, and pgvector integrations are intentionally deferred. 

@@ -4,3 +4,9 @@ sqlalchemy
 psycopg2-binary
 pydantic
 pydantic-settings
+langchain
+langchain-core
+langchain-openai
+langgraph
+requests
+
