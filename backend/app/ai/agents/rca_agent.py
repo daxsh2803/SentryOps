@@ -18,6 +18,8 @@ def rca_agent_node(state: InvestigationState) -> Dict[str, Any]:
         f"Trace Findings: {state.get('trace_findings', [])}\n"
         f"Deployment Findings: {state.get('deployment_findings', [])}\n"
         f"Infrastructure Findings: {state.get('infrastructure_findings', [])}\n"
+        f"Knowledge Findings (Historical Runbooks/Context): {state.get('knowledge_findings', [])}\n"
+        f"IMPORTANT: Historical knowledge must NOT be treated as ground truth for this incident. Use it only as context/reference.\n"
         f"Return JSON with root_cause, confidence, evidence_ids (list), explanation."
     )
     

@@ -9,4 +9,4 @@ langchain-core
 langchain-openai
 langgraph
 requests
-
+pgvector

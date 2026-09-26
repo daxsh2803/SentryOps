@@ -6,6 +6,7 @@ from app.ai.agents.metrics_agent import metrics_agent_node
 from app.ai.agents.trace_agent import trace_agent_node
 from app.ai.agents.deployment_agent import deployment_agent_node
 from app.ai.agents.infrastructure_agent import infrastructure_agent_node
+from app.ai.agents.knowledge_agent import knowledge_agent_node
 from app.ai.agents.rca_agent import rca_agent_node
 
 def build_investigation_graph():
@@ -18,6 +19,7 @@ def build_investigation_graph():
     builder.add_node("trace_agent", trace_agent_node)
     builder.add_node("deployment_agent", deployment_agent_node)
     builder.add_node("infrastructure_agent", infrastructure_agent_node)
+    builder.add_node("knowledge_agent", knowledge_agent_node)
     builder.add_node("rca_agent", rca_agent_node)
     
     # Define edges
@@ -27,12 +29,14 @@ def build_investigation_graph():
     builder.add_edge("manager", "trace_agent")
     builder.add_edge("manager", "deployment_agent")
     builder.add_edge("manager", "infrastructure_agent")
+    builder.add_edge("manager", "knowledge_agent")
     
     builder.add_edge("log_agent", "rca_agent")
     builder.add_edge("metrics_agent", "rca_agent")
     builder.add_edge("trace_agent", "rca_agent")
     builder.add_edge("deployment_agent", "rca_agent")
     builder.add_edge("infrastructure_agent", "rca_agent")
+    builder.add_edge("knowledge_agent", "rca_agent")
     
     builder.add_edge("rca_agent", END)
     

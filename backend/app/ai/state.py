@@ -17,6 +17,7 @@ class InvestigationState(TypedDict):
     trace_findings: List[Dict[str, Any]]
     deployment_findings: List[Dict[str, Any]]
     infrastructure_findings: List[Dict[str, Any]]
+    knowledge_findings: List[Dict[str, Any]]
     
     evidence: Annotated[List[Dict[str, Any]], operator.add]
     errors: Annotated[List[str], operator.add]

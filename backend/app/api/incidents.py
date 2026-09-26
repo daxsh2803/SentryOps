@@ -247,6 +247,7 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
         "trace_findings": [],
         "deployment_findings": [],
         "infrastructure_findings": [],
+        "knowledge_findings": [],
         "evidence": [],
         "root_cause": "",
         "root_cause_confidence": 0.0,
@@ -266,6 +267,7 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
         "TraceAgent",
         "DeploymentAgent",
         "InfrastructureAgent",
+        "KnowledgeAgent",
         "RCAAgent"
     ]
     for agent in agents_run:

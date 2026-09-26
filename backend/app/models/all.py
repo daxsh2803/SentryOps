@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 import enum
 from datetime import datetime
 import uuid
+from pgvector.sqlalchemy import Vector
 from app.db.session import Base
 
 class IncidentStatus(str, enum.Enum):
@@ -140,3 +141,22 @@ class Verification(Base):
     summary = Column(String)
     metrics = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class KnowledgeDocument(Base):
+    __tablename__ = 'knowledge_documents'
+    id = Column(String, primary_key=True, index=True)
+    title = Column(String)
+    content = Column(String)
+    doc_type = Column(String)
+    service = Column(String, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    chunks = relationship('KnowledgeChunk', back_populates='document')
+
+class KnowledgeChunk(Base):
+    __tablename__ = 'knowledge_chunks'
+    id = Column(String, primary_key=True, index=True)
+    document_id = Column(String, ForeignKey('knowledge_documents.id'), nullable=False)
+    content = Column(String)
+    embedding = Column(Vector(384))
+    chunk_index = Column(Integer)
+    document = relationship('KnowledgeDocument', back_populates='chunks')

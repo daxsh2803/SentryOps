@@ -98,3 +98,18 @@ This phase extends the AI agent orchestration pipeline with parallel deep invest
 
 ### Limitations
 - Phase 7 (Knowledge Base, RAG, pgvector, Historical Retrieval), Remediation, Risk Engine, and autonomous actions remain intentionally deferred.
+
+## Phase 7 (Knowledge Base & RAG)
+This phase introduces a historical knowledge base integration using PostgreSQL and pgvector. It adds a KnowledgeAgent to the LangGraph orchestration.
+
+### Features
+- **PostgreSQL pgvector**: Implemented pgvector for embeddings and similarity search.
+- **Knowledge Agent**: Searches historical documentation and runbooks to provide additional context during investigation.
+- **Knowledge Base Categories**: Dedicated directories and metadata for `incidents`, `runbooks`, and `postmortems`.
+- **Deterministic Chunking & Ingestion**: Bounded, deterministic text chunking with stable deduplication during ingestion.
+- **Retrieval API**: Robust `/knowledge/ingest` and `/knowledge/query` endpoints supporting `service` and `doc_type` filtering.
+- **Knowledge Agent**: Searches historical documentation using `affected_service`, `incident_context`, `fault_type`, and existing evidence, returning explicit chunk IDs and similarity scores.
+- **RCA Agent Enhancement**: RCA agent now consumes the historical runbooks retrieved by the KnowledgeAgent to reduce hallucinations and provide accurate remediations.
+
+### Limitations
+- Remediations, Risk Engine, and autonomous actions remain intentionally deferred.
