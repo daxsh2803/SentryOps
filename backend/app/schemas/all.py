@@ -71,3 +71,14 @@ class AIInvestigationResponse(BaseModel):
     timeline: List[str]
     errors: List[str]
     root_cause: Optional[str] = None
+
+class AgentExecutionResponse(BaseModel):
+    agent_name: str
+    status: str
+    input_summary: Optional[str] = None
+    output_summary: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

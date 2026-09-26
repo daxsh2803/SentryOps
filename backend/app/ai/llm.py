@@ -1,5 +1,4 @@
 import os
-from langchain_openai import ChatOpenAI
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage
 
@@ -23,4 +22,5 @@ class MockChatModel(BaseChatModel):
 def get_llm():
     if os.getenv("MOCK_LLM", "true").lower() == "true":
         return MockChatModel()
+    from langchain_openai import ChatOpenAI
     return ChatOpenAI(temperature=0)

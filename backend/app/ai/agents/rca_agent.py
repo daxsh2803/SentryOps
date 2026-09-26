@@ -12,7 +12,20 @@ def rca_agent_node(state: InvestigationState) -> Dict[str, Any]:
     evidence_ids = []
     
     llm = get_llm()
-    prompt = f"Analyze incident {state.get('incident_id', '')} on {state.get('affected_service', '')}. Evidence: {state.get('evidence', [])}. Return JSON with root_cause, confidence, evidence_ids (list), explanation."
+    prompt = (
+        f"Analyze incident {state.get('incident_id', '')} on {state.get('affected_service', '')}.\n"
+        f"Evidence: {state.get('evidence', [])}\n"
+        f"Trace Findings: {state.get('trace_findings', [])}\n"
+        f"Deployment Findings: {state.get('deployment_findings', [])}\n"
+        f"Infrastructure Findings: {state.get('infrastructure_findings', [])}\n"
+        f"Return JSON with root_cause, confidence, evidence_ids (list), explanation."
+    )
+    
+    collected_ids = {
+        e["evidence_id"]
+        for e in state.get("evidence", [])
+        if e.get("evidence_id")
+    }
     
     try:
         res = llm.invoke([HumanMessage(content=prompt)])
@@ -26,14 +39,19 @@ def rca_agent_node(state: InvestigationState) -> Dict[str, Any]:
         root_cause = parsed.get("root_cause", "Unknown")
         confidence = float(parsed.get("confidence", 0.0))
         
-        collected_ids = [e["evidence_id"] for e in state.get("evidence", [])]
-        evidence_ids = parsed.get("evidence_ids", []) or collected_ids
+        raw_ids = parsed.get("evidence_ids", [])
+        if isinstance(raw_ids, list):
+            valid_ids = [eid for eid in raw_ids if eid in collected_ids]
+        else:
+            valid_ids = []
+            
+        evidence_ids = valid_ids if valid_ids else list(collected_ids)
         new_timeline.append("RCA_GENERATED")
     except Exception as e:
         new_errors.append(f"RCAAgent Error: {str(e)}")
         root_cause = f"Failed to generate RCA: {str(e)}"
         confidence = 0.0
-        evidence_ids = []
+        evidence_ids = list(collected_ids)
 
     new_timeline.append("AGENT_COMPLETED: RCAAgent")
     return {

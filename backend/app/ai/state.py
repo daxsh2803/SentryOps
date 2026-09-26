@@ -14,6 +14,9 @@ class InvestigationState(TypedDict):
     
     log_findings: List[Dict[str, Any]]
     metric_findings: List[Dict[str, Any]]
+    trace_findings: List[Dict[str, Any]]
+    deployment_findings: List[Dict[str, Any]]
+    infrastructure_findings: List[Dict[str, Any]]
     
     evidence: Annotated[List[Dict[str, Any]], operator.add]
     errors: Annotated[List[str], operator.add]

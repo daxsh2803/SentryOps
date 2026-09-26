@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.db.session import get_db
 from app.models.all import Incident, IncidentEvent, Evidence, Approval, Remediation, IncidentStatus, Severity
-from app.schemas.all import IncidentCreate, IncidentResponse, IncidentEventResponse, EvidenceCreate, EvidenceResponse, ApprovalCreate, ApprovalResponse
+from app.schemas.all import IncidentCreate, IncidentResponse, IncidentEventResponse, EvidenceCreate, EvidenceResponse, ApprovalCreate, ApprovalResponse, AgentExecutionResponse
 
 router = APIRouter()
 
@@ -74,6 +74,16 @@ def get_evidence(incident_id: str, db: Session = Depends(get_db)):
     
     evidence = db.query(Evidence).filter(Evidence.incident_id == incident.id).order_by(Evidence.timestamp.asc()).all()
     return evidence
+
+@router.get('/incidents/{incident_id}/executions', response_model=List[AgentExecutionResponse])
+def get_incident_executions(incident_id: str, db: Session = Depends(get_db)):
+    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    from app.models.all import AgentExecution
+    executions = db.query(AgentExecution).filter(AgentExecution.incident_id == incident.id).order_by(AgentExecution.id.asc()).all()
+    return executions
 
 @router.post('/incidents/{incident_id}/evidence', response_model=EvidenceResponse)
 def add_evidence(incident_id: str, evidence: EvidenceCreate, db: Session = Depends(get_db)):
@@ -234,6 +244,9 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
         "investigation_plan": "",
         "log_findings": [],
         "metric_findings": [],
+        "trace_findings": [],
+        "deployment_findings": [],
+        "infrastructure_findings": [],
         "evidence": [],
         "root_cause": "",
         "root_cause_confidence": 0.0,
@@ -246,7 +259,15 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
     final_state["timeline"].append("AI_INVESTIGATION_COMPLETED")
     
     # Persist agent executions based on timeline
-    agents_run = ["IncidentManager", "LogAgent", "MetricsAgent", "RCAAgent"]
+    agents_run = [
+        "IncidentManager",
+        "LogAgent",
+        "MetricsAgent",
+        "TraceAgent",
+        "DeploymentAgent",
+        "InfrastructureAgent",
+        "RCAAgent"
+    ]
     for agent in agents_run:
         exec_record = AgentExecution(
             incident_id=incident.id,
@@ -259,6 +280,12 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
 
     # Persist evidence
     for ev in final_state.get("evidence", []):
+        ev_ts = datetime.utcnow()
+        if "timestamp" in ev and ev["timestamp"]:
+            try:
+                ev_ts = datetime.fromisoformat(ev["timestamp"]) if isinstance(ev["timestamp"], str) else ev["timestamp"]
+            except Exception:
+                ev_ts = datetime.utcnow()
         db_ev = Evidence(
             incident_id=incident.id,
             evidence_id=ev["evidence_id"],
@@ -267,7 +294,8 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
             service=ev["service"],
             summary=ev["summary"],
             payload=ev.get("payload", {}),
-            confidence=ev.get("confidence")
+            confidence=ev.get("confidence"),
+            timestamp=ev_ts
         )
         db.add(db_ev)
 

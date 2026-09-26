@@ -86,3 +86,15 @@ This phase introduces the first working AI investigation pipeline using LangGrap
 ### Limitations
 - The LLM integration defaults to a deterministic MockChatModel to guarantee CI consistency and allow testing without an LLM key.
 - Remediations, Risk Engines, and pgvector integrations are intentionally deferred. 
+
+## Phase 6 (Advanced Investigation)
+This phase extends the AI agent orchestration pipeline with parallel deep investigation nodes:
+- **TraceAgent**: Queries Jaeger distributed traces, parses span hierarchies, flags error tags/HTTP status codes, and records structured trace findings and evidence.
+- **DeploymentAgent**: Examines environment change context and synthetic fault injections without fabricating deployment records, labeling active faults as CHANGE events.
+- **InfrastructureAgent**: Queries Prometheus infrastructure and service health metrics, verifying service up/availability signals.
+- **Parallel Fan-out / Fan-in**: IncidentManager fans out to 5 parallel agents (Log, Metrics, Trace, Deployment, Infrastructure), which converge into RCAAgent.
+- **Strict Evidence Validation**: RCAAgent validates and filters LLM-generated evidence IDs against actually collected evidence IDs to prevent hallucinations.
+- **AgentExecution Tracking**: All 7 agents (IncidentManager, LogAgent, MetricsAgent, TraceAgent, DeploymentAgent, InfrastructureAgent, RCAAgent) are persisted to the database.
+
+### Limitations
+- Phase 7 (Knowledge Base, RAG, pgvector, Historical Retrieval), Remediation, Risk Engine, and autonomous actions remain intentionally deferred.
