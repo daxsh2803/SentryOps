@@ -188,6 +188,7 @@ def approve_remediation(incident_id: str, payload: ApprovalCreate, db: Session =
         result=action_result.message
     )
     db.add(execution)
+    db.flush()
 
     event1 = IncidentEvent(
         incident_id=incident.id,
@@ -205,6 +206,47 @@ def approve_remediation(incident_id: str, payload: ApprovalCreate, db: Session =
     )
     db.add(event1)
     db.add(event2)
+
+    if action_result.success:
+        from app.services.verification import perform_verification
+        from app.models.all import Verification
+
+        action_result.execution_id = str(execution.id)
+        state_stub = {"action_result": action_result.model_dump(), "evidence": [{"evidence_id": "api-action"}]}
+        verif_result = perform_verification(state_stub["action_result"], state_stub)
+
+        verification = Verification(
+            incident_id=incident.id,
+            execution_id=execution.id,
+            status=verif_result.verification_status,
+            summary=verif_result.summary,
+            metrics={"checks": [c.model_dump() for c in verif_result.checks], "confidence": verif_result.confidence},
+            created_at=datetime.utcnow()
+        )
+        db.add(verification)
+
+        if verif_result.verified:
+            incident.status = "RESOLVED"
+            event3 = IncidentEvent(
+                incident_id=incident.id,
+                event_type="INCIDENT_RESOLVED",
+                source="incident-api",
+                message="Incident verified resolved",
+                timestamp=datetime.utcnow()
+            )
+            db.add(event3)
+        else:
+            incident.status = "INVESTIGATING"
+            event3 = IncidentEvent(
+                incident_id=incident.id,
+                event_type="INCIDENT_REINVESTIGATION_REQUIRED",
+                source="incident-api",
+                message="Verification failed, re-investigating",
+                timestamp=datetime.utcnow()
+            )
+            db.add(event3)
+        db.add(incident)
+
     db.commit()
 
     return {"status": "APPROVED", "remediation_id": approval.remediation_id, "execution_status": execution.status}
@@ -417,3 +459,25 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
         errors=final_state["errors"],
         root_cause=final_state.get("root_cause")
     )
+
+
+@router.get('/incidents/{incident_id}/verification')
+def get_verification(incident_id: str, db: Session = Depends(get_db)):
+    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    from app.models.all import Verification
+    verification = db.query(Verification).filter(Verification.incident_id == incident.id).order_by(Verification.id.desc()).first()
+
+    if not verification:
+        return {}
+
+    return {
+        "id": verification.id,
+        "execution_id": verification.execution_id,
+        "status": verification.status,
+        "summary": verification.summary,
+        "metrics": verification.metrics,
+        "created_at": verification.created_at
+    }

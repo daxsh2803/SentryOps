@@ -31,3 +31,4 @@ class InvestigationState(TypedDict):
     risk_assessment: Dict[str, Any]
     approval_status: str
     action_result: Dict[str, Any]
+    verification_result: Dict[str, Any]

@@ -11,6 +11,18 @@ SUPPORTED_ACTIONS = {
     "ROLLBACK_SERVICE"
 }
 
+# Simulated infrastructure state for independent verification
+SIMULATED_INFRA_STATE = {}
+
+def get_simulated_state(service: str) -> Dict[str, Any]:
+    if service not in SIMULATED_INFRA_STATE:
+        SIMULATED_INFRA_STATE[service] = {"status": "unhealthy", "replicas": 1, "version": "current"}
+    return SIMULATED_INFRA_STATE[service]
+
+def update_simulated_state(service: str, updates: Dict[str, Any]):
+    state = get_simulated_state(service)
+    state.update(updates)
+
 def evaluate_risk(proposal: RemediationProposal) -> RiskAssessment:
     if proposal.action_type not in SUPPORTED_ACTIONS:
         return RiskAssessment(
@@ -104,19 +116,22 @@ def execute_controlled_action(proposal: RemediationProposal) -> ActionResult:
         timestamp=datetime.utcnow()
     )
 
+import uuid
+
 def restart_service(proposal: RemediationProposal) -> ActionResult:
     service = proposal.target_service
     if not service:
         raise ValueError("Service name is required")
 
-    # Simulate restart against simulated environment
-    # In a real system this would call a safe API, not a shell command
+    update_simulated_state(service, {"status": "healthy"})
+
     return ActionResult(
         success=True,
+        execution_id=f"exec-{uuid.uuid4()}",
         action_type="RESTART_SERVICE",
         target=service,
-        previous_state={"status": "running"},
-        new_state={"status": "restarted"},
+        previous_state={"status": "unhealthy"},
+        new_state={"status": "healthy"},
         message=f"Successfully restarted service {service}",
         timestamp=datetime.utcnow()
     )
@@ -130,11 +145,14 @@ def scale_service(proposal: RemediationProposal) -> ActionResult:
     if replicas is None:
         raise ValueError("Replicas parameter is required for SCALE_SERVICE")
 
+    update_simulated_state(service, {"replicas": replicas, "status": "healthy"})
+
     return ActionResult(
         success=True,
+        execution_id=f"exec-{uuid.uuid4()}",
         action_type="SCALE_SERVICE",
         target=service,
-        previous_state={"replicas": 1}, # Simulated
+        previous_state={"replicas": 1},
         new_state={"replicas": replicas},
         message=f"Successfully scaled service {service} to {replicas} replicas",
         timestamp=datetime.utcnow()
@@ -147,8 +165,11 @@ def rollback_service(proposal: RemediationProposal) -> ActionResult:
 
     version = proposal.parameters.get("version", "previous")
 
+    update_simulated_state(service, {"version": version, "status": "healthy"})
+
     return ActionResult(
         success=True,
+        execution_id=f"exec-{uuid.uuid4()}",
         action_type="ROLLBACK_SERVICE",
         target=service,
         previous_state={"version": "current"},

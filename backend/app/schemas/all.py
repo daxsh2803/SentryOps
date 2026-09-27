@@ -99,9 +99,25 @@ class RiskAssessment(BaseModel):
 
 class ActionResult(BaseModel):
     success: bool
+    execution_id: Optional[str] = None
     action_type: str
     target: str
     previous_state: Optional[Dict[str, Any]] = None
     new_state: Optional[Dict[str, Any]] = None
     message: str
+    timestamp: datetime
+
+class VerificationCheck(BaseModel):
+    name: str
+    passed: bool
+    observed: str
+    expected: str
+
+class VerificationResult(BaseModel):
+    verified: bool
+    verification_status: str
+    summary: str
+    checks: List[VerificationCheck]
+    evidence_ids: List[str]
+    confidence: float
     timestamp: datetime

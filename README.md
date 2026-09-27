@@ -131,3 +131,21 @@ This phase introduces a structured remediation pipeline that consumes RCA output
 - The action vocabulary is strictly limited and parameterized.
 - The Risk Engine operates deterministically outside the LLM.
 - Phase 9 (Verification) is intentionally deferred.
+
+
+## Phase 9 (Verification Agent)
+This phase introduces a Verification Agent that runs after a remediation action to determine whether the incident has actually recovered.
+
+### Features
+- **Verification Agent**: Consumes the action result and deterministic checks to produce a structured \VerificationResult\.
+- **Deterministic Verification**: Rules evaluated safely against the simulated state (service health, replica count, version) without arbitrary code execution.
+- **Verification Evidence**: Each check retains its observed vs expected state.
+- **Incident Lifecycle Integration**:
+  - **Successful Verification**: Appends a timeline event and transitions the incident to \RESOLVED\.
+  - **Failed Verification**: Appends a timeline event and transitions the incident to \INVESTIGATING\ (re-investigation).
+- **LangGraph Integration**: Verification executes conditionally *only* after a successful action.
+- **Database Persistence**: Verification results, checks, and metrics are saved to the \Verification\ database model.
+- **Safety Boundaries**: Verification is read-only and deterministic. No LLM controls execution or arbitrary bash scripts.
+
+### Limitations
+- Phase 10 remains intentionally deferred.
