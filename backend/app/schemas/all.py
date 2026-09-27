@@ -82,3 +82,26 @@ class AgentExecutionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class RemediationProposal(BaseModel):
+    action_type: str
+    target_service: str
+    parameters: Dict[str, Any]
+    reason: str
+    evidence_ids: List[str]
+    confidence: float
+
+class RiskAssessment(BaseModel):
+    risk_level: str
+    allowed: bool
+    requires_approval: bool
+    reasons: List[str]
+
+class ActionResult(BaseModel):
+    success: bool
+    action_type: str
+    target: str
+    previous_state: Optional[Dict[str, Any]] = None
+    new_state: Optional[Dict[str, Any]] = None
+    message: str
+    timestamp: datetime

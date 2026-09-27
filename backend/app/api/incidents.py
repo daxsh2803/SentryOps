@@ -47,7 +47,7 @@ def get_incidents(status: str = None, severity: str = None, affected_service: st
         query = query.filter(Incident.severity == severity)
     if affected_service:
         query = query.filter(Incident.affected_service == affected_service)
-    
+
     return query.all()
 
 @router.get('/incidents/{incident_id}', response_model=IncidentResponse)
@@ -62,7 +62,7 @@ def get_incident_timeline(incident_id: str, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-    
+
     events = db.query(IncidentEvent).filter(IncidentEvent.incident_id == incident.id).order_by(IncidentEvent.timestamp.asc()).all()
     return events
 
@@ -71,7 +71,7 @@ def get_evidence(incident_id: str, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-    
+
     evidence = db.query(Evidence).filter(Evidence.incident_id == incident.id).order_by(Evidence.timestamp.asc()).all()
     return evidence
 
@@ -80,7 +80,7 @@ def get_incident_executions(incident_id: str, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-    
+
     from app.models.all import AgentExecution
     executions = db.query(AgentExecution).filter(AgentExecution.incident_id == incident.id).order_by(AgentExecution.id.asc()).all()
     return executions
@@ -90,7 +90,7 @@ def add_evidence(incident_id: str, evidence: EvidenceCreate, db: Session = Depen
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-    
+
     db_evidence = Evidence(
         incident_id=incident.id,
         evidence_id=f"EVID-{uuid.uuid4().hex[:6].upper()}",
@@ -105,7 +105,7 @@ def add_evidence(incident_id: str, evidence: EvidenceCreate, db: Session = Depen
     db.add(db_evidence)
     db.commit()
     db.refresh(db_evidence)
-    
+
     event = IncidentEvent(
         incident_id=incident.id,
         event_type="EVIDENCE_ADDED",
@@ -123,16 +123,16 @@ def investigate_incident(incident_id: str, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-    
+
     if incident.status == IncidentStatus.RESOLVED or incident.status == IncidentStatus.CLOSED:
         raise HTTPException(status_code=400, detail="Cannot investigate a resolved/closed incident")
-        
+
     if incident.status == IncidentStatus.INVESTIGATING:
         return {"incident_id": incident.incident_id, "status": incident.status}
-        
+
     incident.status = IncidentStatus.INVESTIGATING
     incident.updated_at = datetime.utcnow()
-    
+
     event = IncidentEvent(
         incident_id=incident.id,
         event_type="INVESTIGATION_STARTED",
@@ -140,73 +140,89 @@ def investigate_incident(incident_id: str, db: Session = Depends(get_db)):
         message="Incident moved to INVESTIGATING",
         timestamp=datetime.utcnow()
     )
-    
+
     db.add(incident)
     db.add(event)
     db.commit()
-    
+
     return {"incident_id": incident.incident_id, "status": incident.status}
 
 @router.post('/incidents/{incident_id}/approve')
 def approve_remediation(incident_id: str, payload: ApprovalCreate, db: Session = Depends(get_db)):
-    # Simulates an approval action on an incident for Phase 4. We just log the approval state.
+    from app.services.remediation import execute_controlled_action
+    from app.schemas.all import RemediationProposal
+    from app.models.all import Execution
+
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-        
-    # We find a pending approval for this incident
+
     approval = db.query(Approval).filter(Approval.incident_id == incident.id, Approval.status == 'PENDING').first()
     if not approval:
-        # Create a dummy remediation & approval if one doesn't exist for test purposes
-        remediation = Remediation(incident_id=incident.id, action_type="DUMMY", description="Dummy Action", status="PENDING")
-        db.add(remediation)
-        db.commit()
-        db.refresh(remediation)
-        
-        approval = Approval(incident_id=incident.id, remediation_id=remediation.id, status="PENDING")
-        db.add(approval)
-        db.commit()
-        db.refresh(approval)
-        
+        raise HTTPException(status_code=404, detail="No pending approval found")
+
+    remediation = db.query(Remediation).filter(Remediation.id == approval.remediation_id).first()
+
     approval.status = "APPROVED"
     approval.resolved_at = datetime.utcnow()
     approval.reason = payload.reason
-    
-    event = IncidentEvent(
+
+    # Execute action
+    proposal = RemediationProposal(
+        action_type=remediation.action_type,
+        target_service=remediation.parameters.get("target_service", ""),
+        parameters=remediation.parameters,
+        reason=remediation.description,
+        evidence_ids=[],
+        confidence=1.0
+    )
+
+    action_result = execute_controlled_action(proposal)
+
+    execution = Execution(
+        incident_id=incident.id,
+        remediation_id=remediation.id,
+        status="SUCCESS" if action_result.success else "FAILED",
+        started_at=datetime.utcnow(),
+        completed_at=datetime.utcnow(),
+        result=action_result.message
+    )
+    db.add(execution)
+
+    event1 = IncidentEvent(
         incident_id=incident.id,
         event_type="APPROVAL_RESOLVED",
         source="incident-api",
         message="Remediation approved",
         timestamp=datetime.utcnow()
     )
-    db.add(approval)
-    db.add(event)
+    event2 = IncidentEvent(
+        incident_id=incident.id,
+        event_type="ACTION_EXECUTED",
+        source="incident-api",
+        message=f"Action execution: {action_result.message}",
+        timestamp=datetime.utcnow()
+    )
+    db.add(event1)
+    db.add(event2)
     db.commit()
-    
-    return {"status": "APPROVED", "remediation_id": approval.remediation_id}
+
+    return {"status": "APPROVED", "remediation_id": approval.remediation_id, "execution_status": execution.status}
 
 @router.post('/incidents/{incident_id}/reject')
 def reject_remediation(incident_id: str, payload: ApprovalCreate, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-        
+
     approval = db.query(Approval).filter(Approval.incident_id == incident.id, Approval.status == 'PENDING').first()
     if not approval:
-        remediation = Remediation(incident_id=incident.id, action_type="DUMMY", description="Dummy Action", status="PENDING")
-        db.add(remediation)
-        db.commit()
-        db.refresh(remediation)
-        
-        approval = Approval(incident_id=incident.id, remediation_id=remediation.id, status="PENDING")
-        db.add(approval)
-        db.commit()
-        db.refresh(approval)
-        
+        raise HTTPException(status_code=404, detail="No pending approval found")
+
     approval.status = "REJECTED"
     approval.resolved_at = datetime.utcnow()
     approval.reason = payload.reason
-    
+
     event = IncidentEvent(
         incident_id=incident.id,
         event_type="APPROVAL_RESOLVED",
@@ -217,8 +233,42 @@ def reject_remediation(incident_id: str, payload: ApprovalCreate, db: Session = 
     db.add(approval)
     db.add(event)
     db.commit()
-    
+
     return {"status": "REJECTED", "remediation_id": approval.remediation_id}
+
+@router.get('/incidents/{incident_id}/remediation')
+def get_remediation(incident_id: str, db: Session = Depends(get_db)):
+    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    remediation = db.query(Remediation).filter(Remediation.incident_id == incident.id).order_by(Remediation.id.desc()).first()
+    if not remediation:
+        return {}
+
+    approval = db.query(Approval).filter(Approval.remediation_id == remediation.id).first()
+    from app.models.all import Execution
+    execution = db.query(Execution).filter(Execution.remediation_id == remediation.id).first()
+
+    return {
+        "remediation": {
+            "id": remediation.id,
+            "action_type": remediation.action_type,
+            "description": remediation.description,
+            "status": remediation.status,
+            "parameters": remediation.parameters
+        },
+        "approval": {
+            "id": approval.id,
+            "status": approval.status
+        } if approval else None,
+        "execution": {
+            "id": execution.id,
+            "status": execution.status,
+            "result": execution.result
+        } if execution else None
+    }
+
 from app.ai.graph import graph
 from app.ai.state import InvestigationState
 from app.schemas.all import AIInvestigationResponse
@@ -229,7 +279,7 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
-        
+
     incident.status = IncidentStatus.INVESTIGATING
     db.commit()
 
@@ -255,10 +305,10 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
         "errors": [],
         "timeline": ["AI_INVESTIGATION_STARTED"]
     }
-    
+
     final_state = graph.invoke(initial_state)
     final_state["timeline"].append("AI_INVESTIGATION_COMPLETED")
-    
+
     # Persist agent executions based on timeline
     agents_run = [
         "IncidentManager",
@@ -310,7 +360,7 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
             message=event_str
         )
         db.add(db_event)
-        
+
     # Persist root cause
     if final_state.get("root_cause"):
         db_rc = RootCause(
@@ -321,6 +371,42 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
             status="IDENTIFIED"
         )
         db.add(db_rc)
+
+    # Persist remediation
+    if final_state.get("remediation_proposal"):
+        proposal = final_state["remediation_proposal"]
+        db_remediation = Remediation(
+            incident_id=incident.id,
+            action_type=proposal["action_type"],
+            description=proposal["reason"],
+            status=final_state.get("approval_status", "PENDING_APPROVAL"),
+            parameters={**proposal["parameters"], "target_service": proposal["target_service"]}
+        )
+        db.add(db_remediation)
+        db.commit()
+        db.refresh(db_remediation)
+
+        if final_state.get("risk_assessment"):
+            if final_state["risk_assessment"]["requires_approval"]:
+                db_approval = Approval(
+                    incident_id=incident.id,
+                    remediation_id=db_remediation.id,
+                    status=final_state.get("approval_status", "PENDING")
+                )
+                db.add(db_approval)
+
+        if final_state.get("action_result"):
+            from app.models.all import Execution
+            res = final_state["action_result"]
+            db_exec = Execution(
+                incident_id=incident.id,
+                remediation_id=db_remediation.id,
+                status="SUCCESS" if res["success"] else "FAILED",
+                started_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                result=res["message"]
+            )
+            db.add(db_exec)
 
     db.commit()
 

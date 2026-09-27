@@ -113,3 +113,21 @@ This phase introduces a historical knowledge base integration using PostgreSQL a
 
 ### Limitations
 - Remediations, Risk Engine, and autonomous actions remain intentionally deferred.
+
+
+## Phase 8 (Remediation & Risk Engine)
+This phase introduces a structured remediation pipeline that consumes RCA output and orchestrates controlled actions against the environment.
+
+### Features
+- **Remediation Agent**: Proposes a structured \RemediationProposal\ limited to an explicit allowlist of actions (\RESTART_SERVICE\, \SCALE_SERVICE\, \ROLLBACK_SERVICE\).
+- **Risk Engine**: Deterministically assesses the proposal and assigns a risk level (LOW, MEDIUM, HIGH) based on hardcoded policy rules.
+- **Approval Workflow**: HIGH and MEDIUM risk actions pause execution and require human approval via the \/incidents/{incident_id}/approve\ and \/reject\ APIs.
+- **Controlled Actions**: Safe, simulated execution tools that implement the allowlisted actions against the simulated environment.
+- **Remediation Persistence**: Remediation proposals, risk assessments, approval states, and action results are fully persisted in the PostgreSQL database.
+- **API Endpoints**: Added \GET /incidents/{incident_id}/remediation\ to expose the structured remediation state.
+
+### Safety Boundaries
+- LLMs never directly execute shell scripts or infrastructure commands.
+- The action vocabulary is strictly limited and parameterized.
+- The Risk Engine operates deterministically outside the LLM.
+- Phase 9 (Verification) is intentionally deferred.
