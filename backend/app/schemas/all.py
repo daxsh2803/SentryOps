@@ -121,3 +121,28 @@ class VerificationResult(BaseModel):
     evidence_ids: List[str]
     confidence: float
     timestamp: datetime
+
+class EvaluationCheck(BaseModel):
+    name: str
+    dimension: str
+    passed: bool
+    observed: str
+    expected: str
+    details: Optional[str] = None
+
+class EvaluationResult(BaseModel):
+    evaluation_id: str
+    incident_id: str
+    overall_status: str
+    summary: str
+    investigation_result: str
+    rca_result: str
+    remediation_result: str
+    verification_result: str
+    checks: List[EvaluationCheck]
+    failures: List[str]
+    recommendations: List[str]
+    evaluated_at: datetime
+
+    class Config:
+        from_attributes = True

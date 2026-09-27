@@ -13,6 +13,14 @@ from app.ai.agents.risk_engine import risk_engine_node
 
 from app.ai.agents.verification_agent import verification_agent_node
 
+def route_after_risk_engine(state: InvestigationState) -> str:
+    if state.get("approval_status") == "PENDING_APPROVAL":
+        return END
+    action_result = state.get("action_result")
+    if action_result and action_result.get("success") and action_result.get("execution_id"):
+        return "verification_agent"
+    return END
+
 def build_investigation_graph():
     builder = StateGraph(InvestigationState)
 
@@ -47,14 +55,6 @@ def build_investigation_graph():
 
     builder.add_edge("rca_agent", "remediation_agent")
     builder.add_edge("remediation_agent", "risk_engine")
-
-    def route_after_risk_engine(state: InvestigationState) -> str:
-        if state.get("approval_status") == "PENDING_APPROVAL":
-            return END
-        action_result = state.get("action_result")
-        if action_result and action_result.get("success"):
-            return "verification_agent"
-        return END
 
     builder.add_conditional_edges(
         "risk_engine",

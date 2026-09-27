@@ -40,6 +40,7 @@ class Incident(Base):
     evidence = relationship('Evidence', back_populates='incident')
     root_causes = relationship('RootCause', back_populates='incident')
     remediations = relationship('Remediation', back_populates='incident')
+    evaluations = relationship('Evaluation', back_populates='incident')
 
 class IncidentEvent(Base):
     __tablename__ = 'incident_events'
@@ -160,3 +161,21 @@ class KnowledgeChunk(Base):
     embedding = Column(Vector(384))
     chunk_index = Column(Integer)
     document = relationship('KnowledgeDocument', back_populates='chunks')
+
+class Evaluation(Base):
+    __tablename__ = 'evaluations'
+    id = Column(Integer, primary_key=True, index=True)
+    evaluation_id = Column(String, unique=True, index=True, nullable=False)
+    incident_id = Column(Integer, ForeignKey('incidents.id'), nullable=False)
+    overall_status = Column(String, nullable=False)
+    summary = Column(String)
+    investigation_status = Column(String)
+    rca_status = Column(String)
+    remediation_status = Column(String)
+    verification_status = Column(String)
+    checks = Column(JSON, default=list)
+    failures = Column(JSON, default=list)
+    recommendations = Column(JSON, default=list)
+    evaluated_at = Column(DateTime, default=datetime.utcnow)
+
+    incident = relationship('Incident', back_populates='evaluations')

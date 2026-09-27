@@ -56,6 +56,7 @@ export function IncidentDetail() {
   const [remediation, setRemediation] = useState<any>(null);
   const [risk, setRisk] = useState<any>(null);
   const [verification, setVerification] = useState<any>(null);
+  const [evaluation, setEvaluation] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
@@ -63,14 +64,15 @@ export function IncidentDetail() {
   const fetchAll = async () => {
     if (!id) return;
     try {
-      const [incRes, timeRes, evRes, rcaRes, remRes, riskRes, verifRes] = await Promise.all([
+      const [incRes, timeRes, evRes, rcaRes, remRes, riskRes, verifRes, evalRes] = await Promise.all([
         api.getIncident(id).catch(() => null),
         api.getTimeline(id).catch(() => []),
         api.getEvidence(id).catch(() => []),
         api.getRca(id).catch(() => null),
         api.getRemediation(id).catch(() => null),
         api.getRisk(id).catch(() => null),
-        api.getVerification(id).catch(() => null)
+        api.getVerification(id).catch(() => null),
+        api.getEvaluation(id).catch(() => null)
       ]);
 
       setIncident(incRes);
@@ -80,6 +82,7 @@ export function IncidentDetail() {
       setRemediation(remRes?.remediation?.id ? remRes : null);
       setRisk(riskRes?.risk_level ? riskRes : null);
       setVerification(verifRes?.id ? verifRes : null);
+      setEvaluation(evalRes?.evaluation_id ? evalRes : null);
     } catch (e) {
       console.error(e);
     } finally {
@@ -296,6 +299,78 @@ export function IncidentDetail() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title"><Activity className="icon" /> Incident Evaluation</h3>
+              {evaluation && (
+                <span className={`badge ${
+                  evaluation.overall_status === 'PASS' ? 'badge-success' :
+                  evaluation.overall_status === 'PARTIAL' ? 'badge-warning' :
+                  evaluation.overall_status === 'FAIL' ? 'badge-danger' : 'badge-neutral'
+                }`}>
+                  {evaluation.overall_status}
+                </span>
+              )}
+            </div>
+
+            {!evaluation ? (
+              <p className="text-secondary text-sm">Evaluation not available.</p>
+            ) : (
+              <div>
+                <p className="text-sm mb-4">{evaluation.summary}</p>
+
+                <div className="grid-2 gap-2 mb-4">
+                  <div className="p-3 border rounded" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-main)' }}>
+                    <div className="text-xs text-secondary">Investigation</div>
+                    <div className="font-bold text-sm mt-1">{evaluation.investigation_result}</div>
+                  </div>
+                  <div className="p-3 border rounded" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-main)' }}>
+                    <div className="text-xs text-secondary">RCA</div>
+                    <div className="font-bold text-sm mt-1">{evaluation.rca_result}</div>
+                  </div>
+                  <div className="p-3 border rounded" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-main)' }}>
+                    <div className="text-xs text-secondary">Remediation</div>
+                    <div className="font-bold text-sm mt-1">{evaluation.remediation_result}</div>
+                  </div>
+                  <div className="p-3 border rounded" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-main)' }}>
+                    <div className="text-xs text-secondary">Verification</div>
+                    <div className="font-bold text-sm mt-1">{evaluation.verification_result}</div>
+                  </div>
+                </div>
+
+                <h4 className="font-bold text-sm mb-2">Evaluation Checks</h4>
+                <div className="flex-col gap-2 mb-4">
+                  {evaluation.checks?.map((chk: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center p-2 border rounded text-xs" style={{ borderColor: 'var(--border-color)' }}>
+                      <div>
+                        <div className="font-medium">{chk.name}</div>
+                        <div className="text-secondary mt-1">{chk.observed}</div>
+                      </div>
+                      <div>
+                        {chk.passed ? (
+                          <span className="badge badge-success">Passed</span>
+                        ) : (
+                          <span className="badge badge-danger">Failed</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {evaluation.recommendations?.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-sm mb-2">Recommendations</h4>
+                    <ul className="text-xs text-secondary" style={{ paddingLeft: '1.25rem' }}>
+                      {evaluation.recommendations.map((rec: string, i: number) => (
+                        <li key={i} className="mb-1">{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>

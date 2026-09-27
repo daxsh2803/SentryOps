@@ -148,7 +148,7 @@ This phase introduces a Verification Agent that runs after a remediation action 
 - **Safety Boundaries**: Verification is read-only and deterministic. No LLM controls execution or arbitrary bash scripts.
 
 ### Limitations
-- Phase 11 remains intentionally deferred.
+- Production Kubernetes orchestration and cloud deployments remain intentionally deferred.
 
 ## Phase 10: Operator Dashboard / UI (Implemented)
 The frontend dashboard gives operators full visibility into the incident response lifecycle.
@@ -172,3 +172,45 @@ npm run dev
 
 ### Operator Actions & Safety Boundary
 The frontend only communicates with the backend via REST API endpoints. All remediation execution remains securely restricted to backend infrastructure and risk engine gates. The dashboard NEVER executes infrastructure commands directly.
+
+## Phase 11: Incident Evaluation Framework (Implemented)
+This phase introduces an automated, deterministic Incident Evaluation Framework that evaluates the quality, completeness, and internal consistency of the entire incident response lifecycle.
+
+### Lifecycle Evaluated
+```text
+DETECTION -> INVESTIGATION -> EVIDENCE -> RCA -> REMEDIATION -> RISK -> APPROVAL -> EXECUTION -> VERIFICATION -> EVALUATION
+```
+
+### Evaluation Dimensions
+1. **Investigation Evaluation**:
+   - Assesses whether the investigation was initiated and completed.
+   - Verifies telemetry evidence collection and evidence payload quality.
+   - Evaluates agent execution success rates.
+2. **RCA Evaluation**:
+   - Validates existence and non-empty description of root causes.
+   - Validates confidence scores in [0.0, 1.0].
+   - Strictly validates evidence linkage against actually collected incident evidence to prevent hallucinations.
+3. **Remediation Evaluation**:
+   - Verifies supported action types (`RESTART_SERVICE`, `SCALE_SERVICE`, `ROLLBACK_SERVICE`).
+   - Verifies target service and parameter validity.
+   - Verifies deterministic risk policy evaluation.
+   - Enforces human approval policies (no unauthorized executions on pending or rejected proposals).
+   - Verifies execution outcomes.
+4. **Verification Evaluation**:
+   - Verifies post-remediation verification execution.
+   - Checks observed vs expected metrics.
+   - Verifies status consistency and incident status alignment (e.g. `RESOLVED` on success, `INVESTIGATING` on failed verification).
+
+### Deterministic Aggregation
+- **Overall Statuses**: `PASS`, `PARTIAL`, `FAIL`, `NOT_EVALUABLE`.
+- **Failures List**: Explicit breakdown of every failing check with observed vs expected details.
+- **Actionable Recommendations**: Clear remediation and observability recommendations for operators.
+
+### API Endpoint
+- `GET /incidents/{incident_id}/evaluation`: Deterministically computes and returns the structured `EvaluationResult`.
+
+### Safety Boundaries
+- **Strictly Read-Only**: The evaluator never executes shell commands or modifies infrastructure.
+- **No Remediation Control**: The evaluator cannot approve or reject remediation proposals.
+- **Side-Effect Free**: Does not modify simulated production state.
+- **Deterministic**: Does not rely on unconstrained LLM output for safety-critical checks. Evaluation does NOT control remediation execution.

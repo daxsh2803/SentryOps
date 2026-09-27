@@ -166,3 +166,38 @@ def test_graph_routing_no_remediation_loop():
     # Verification agent is a terminal node that just sets state, graph routes to END
     # Just asserting the graph can be built successfully without loop errors
     assert graph is not None
+
+# 22. Graph Routing Scenarios for Verification Gate
+def test_route_after_risk_engine_pending_approval():
+    from langgraph.graph import END
+    from app.ai.graph import route_after_risk_engine
+    assert route_after_risk_engine({"approval_status": "PENDING_APPROVAL"}) == END
+
+
+def test_route_after_risk_engine_scenarios():
+    from langgraph.graph import END
+    from app.ai.graph import route_after_risk_engine
+
+    # Scenario 1: PENDING_APPROVAL -> END
+    assert route_after_risk_engine({"approval_status": "PENDING_APPROVAL"}) == END
+
+    # Scenario 2: missing action_result -> END
+    assert route_after_risk_engine({"approval_status": "APPROVED", "action_result": None}) == END
+
+    # Scenario 3: success=True but missing execution_id -> END
+    assert route_after_risk_engine({
+        "approval_status": "APPROVED",
+        "action_result": {"success": True}
+    }) == END
+
+    # Scenario 4: success=True and has execution_id -> verification_agent
+    assert route_after_risk_engine({
+        "approval_status": "APPROVED",
+        "action_result": {"success": True, "execution_id": "exec_123"}
+    }) == "verification_agent"
+
+    # Scenario 5: success=False and has execution_id -> END
+    assert route_after_risk_engine({
+        "approval_status": "APPROVED",
+        "action_result": {"success": False, "execution_id": "exec_123"}
+    }) == END

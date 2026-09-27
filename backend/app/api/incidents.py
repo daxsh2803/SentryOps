@@ -528,3 +528,13 @@ def get_verification(incident_id: str, db: Session = Depends(get_db)):
         "metrics": verification.metrics,
         "created_at": verification.created_at
     }
+
+@router.get('/incidents/{incident_id}/evaluation')
+def get_incident_evaluation(incident_id: str, db: Session = Depends(get_db)):
+    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    from app.services.evaluation import evaluate_incident
+    eval_result = evaluate_incident(incident, db, persist=False)
+    return eval_result.model_dump()

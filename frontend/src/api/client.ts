@@ -53,5 +53,9 @@ export const api = {
   getServiceHealth: async (service: string) => {
     const res = await apiClient.get(`/service-health/${service}`);
     return res.data;
+  },
+  getEvaluation: async (id: string) => {
+    const res = await apiClient.get(`/incidents/${id}/evaluation`);
+    return res.data;
   }
 };
