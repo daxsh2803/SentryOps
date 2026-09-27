@@ -1,0 +1,307 @@
+import { useEffect, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { api } from '../api/client';
+import { ArrowLeft, Activity, Shield, CheckCircle, XCircle, AlertTriangle, FileText, Database, Server } from 'lucide-react';
+
+function ServiceHealth({ service }: { service: string }) {
+  const [health, setHealth] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const data = await api.getServiceHealth(service);
+        setHealth(data);
+      } catch (e) {
+        console.error("Failed to fetch service health");
+      }
+    };
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 5000);
+    return () => clearInterval(interval);
+  }, [service]);
+
+  if (!health) return null;
+
+  return (
+    <div className="card border-info" style={{ borderColor: 'var(--info)' }}>
+      <h3 className="card-title"><Server className="icon" /> Service Health: {service}</h3>
+      <div className="grid-3 mt-4">
+        <div>
+          <div className="text-sm text-secondary">Status</div>
+          <div className="font-bold flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${health.status === 'healthy' ? 'bg-success' : 'bg-danger'}`} style={{ backgroundColor: health.status === 'healthy' ? 'var(--success)' : 'var(--danger)', display: 'inline-block' }}></span>
+            {health.status}
+          </div>
+        </div>
+        <div>
+          <div className="text-sm text-secondary">Replicas</div>
+          <div className="font-bold">{health.replicas}</div>
+        </div>
+        <div>
+          <div className="text-sm text-secondary">Version</div>
+          <div className="font-mono">{health.version}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function IncidentDetail() {
+  const { id } = useParams<{ id: string }>();
+
+  const [incident, setIncident] = useState<any>(null);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [evidence, setEvidence] = useState<any[]>([]);
+  const [rca, setRca] = useState<any>(null);
+  const [remediation, setRemediation] = useState<any>(null);
+  const [risk, setRisk] = useState<any>(null);
+  const [verification, setVerification] = useState<any>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState(false);
+
+  const fetchAll = async () => {
+    if (!id) return;
+    try {
+      const [incRes, timeRes, evRes, rcaRes, remRes, riskRes, verifRes] = await Promise.all([
+        api.getIncident(id).catch(() => null),
+        api.getTimeline(id).catch(() => []),
+        api.getEvidence(id).catch(() => []),
+        api.getRca(id).catch(() => null),
+        api.getRemediation(id).catch(() => null),
+        api.getRisk(id).catch(() => null),
+        api.getVerification(id).catch(() => null)
+      ]);
+
+      setIncident(incRes);
+      setTimeline(timeRes);
+      setEvidence(evRes);
+      setRca(rcaRes?.id ? rcaRes : null);
+      setRemediation(remRes?.remediation?.id ? remRes : null);
+      setRisk(riskRes?.risk_level ? riskRes : null);
+      setVerification(verifRes?.id ? verifRes : null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAll();
+    const interval = setInterval(fetchAll, 5000);
+    return () => clearInterval(interval);
+  }, [id]);
+
+  const handleApprove = async () => {
+    if (!id) return;
+    setApproving(true);
+    try {
+      await api.approveRemediation(id, "Approved via Dashboard");
+      await fetchAll();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to approve');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!id) return;
+    setApproving(true);
+    try {
+      await api.rejectRemediation(id, "Rejected via Dashboard");
+      await fetchAll();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to reject');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  if (loading && !incident) {
+    return <div className="center-content"><div className="loading-spinner"></div></div>;
+  }
+
+  if (!incident) {
+    return <div>Incident not found.</div>;
+  }
+
+  return (
+    <div>
+      <Link to="/" className="btn btn-outline mb-6">
+        <ArrowLeft size={16} /> Back to Incidents
+      </Link>
+
+      <div className="card">
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="flex items-center gap-4 mb-2">
+              <h1 className="text-2xl font-bold">{incident.incident_id}</h1>
+              <span className="badge badge-warning">{incident.status}</span>
+              <span className="badge badge-danger">{incident.severity}</span>
+            </div>
+            <h2 className="text-xl text-secondary mb-4">{incident.title}</h2>
+            <div className="grid-3 mb-4">
+              <div>
+                <div className="text-sm text-secondary">Service</div>
+                <div className="font-medium">{incident.affected_service || '-'}</div>
+              </div>
+              <div>
+                <div className="text-sm text-secondary">Fault Type</div>
+                <div className="font-medium">{incident.fault_type || '-'}</div>
+              </div>
+              <div>
+                <div className="text-sm text-secondary">Created</div>
+                <div className="font-medium">{new Date(incident.created_at).toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid-2">
+        <div className="flex-col gap-4">
+          {incident.affected_service && (
+            <ServiceHealth service={incident.affected_service} />
+          )}
+
+          <div className="card">
+            <h3 className="card-title"><Activity className="icon" /> Timeline</h3>
+            <div className="timeline-container mt-4">
+              {timeline.map((ev, i) => (
+                <div key={i} className="timeline-item">
+                  <div className="font-medium">{ev.event_type}</div>
+                  <div className="text-sm text-secondary">{new Date(ev.timestamp).toLocaleString()}</div>
+                  <div className="text-sm mt-1 text-muted">{ev.message}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="card-title"><Database className="icon" /> Evidence</h3>
+            {evidence.length === 0 ? <p className="text-secondary text-sm">No evidence collected.</p> : (
+              <div className="flex-col gap-4 mt-4">
+                {evidence.map(ev => (
+                  <div key={ev.evidence_id} className="p-4 border border-color rounded" style={{ borderColor: 'var(--border-color)' }}>
+                    <div className="flex justify-between mb-2">
+                      <span className="font-mono text-sm">{ev.evidence_id}</span>
+                      <span className="badge badge-neutral">{ev.evidence_type}</span>
+                    </div>
+                    <p className="text-sm mb-2">{ev.summary}</p>
+                    <div className="text-xs text-secondary flex gap-4">
+                      <span>Source: {ev.source}</span>
+                      <span>Confidence: {ev.confidence || 'N/A'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-col gap-4">
+          <div className="card">
+            <h3 className="card-title"><FileText className="icon" /> Root Cause Analysis</h3>
+            {!rca ? <p className="text-secondary text-sm">RCA not available yet.</p> : (
+              <div className="mt-4">
+                <p className="mb-4">{rca.root_cause}</p>
+                <div className="text-sm text-secondary mb-2">Confidence: {(rca.confidence * 100).toFixed(0)}%</div>
+                {rca.evidence_ids && (
+                  <div className="flex gap-2 flex-wrap">
+                    {rca.evidence_ids.map((id: string) => <span key={id} className="badge badge-neutral font-mono lowercase">{id}</span>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h3 className="card-title"><Shield className="icon" /> Remediation & Risk</h3>
+            {!remediation ? <p className="text-secondary text-sm">No remediation proposed yet.</p> : (
+              <div className="mt-4">
+                <div className="mb-4">
+                  <span className="badge badge-info mb-2">{remediation.remediation.action_type}</span>
+                  <p className="text-sm mt-2">{remediation.remediation.description}</p>
+                  <div className="code-block mt-2">
+                    {JSON.stringify(remediation.remediation.parameters, null, 2)}
+                  </div>
+                </div>
+
+                {risk && (
+                  <div className={`p-4 rounded border mt-4 ${risk.risk_level === 'HIGH' ? 'border-danger' : risk.risk_level === 'MEDIUM' ? 'border-warning' : 'border-success'}`} style={{ borderColor: 'var(--border-color)', background: 'rgba(0,0,0,0.2)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle size={16} className={risk.risk_level === 'HIGH' ? 'text-danger' : risk.risk_level === 'MEDIUM' ? 'text-warning' : 'text-success'} />
+                      <span className="font-bold">Risk: {risk.risk_level}</span>
+                    </div>
+                    <ul className="text-sm text-secondary ml-4" style={{ listStyle: 'disc' }}>
+                      {risk.reasons.map((r: string, i: number) => <li key={i}>{r}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {incident.status === 'PENDING_APPROVAL' && (
+                  <div className="mt-6 flex gap-4 p-4 border rounded" style={{ borderColor: 'var(--warning)', background: 'rgba(245, 158, 11, 0.1)' }}>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-warning mb-1">Approval Required</h4>
+                      <p className="text-sm text-secondary">Review the remediation and risk assessment before proceeding.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={handleReject} disabled={approving} className="btn btn-outline border-danger text-danger">Reject</button>
+                      <button onClick={handleApprove} disabled={approving} className="btn btn-success">Approve Action</button>
+                    </div>
+                  </div>
+                )}
+
+                {remediation.execution && (
+                  <div className="mt-6">
+                    <h4 className="font-bold mb-2 flex items-center gap-2"><CheckCircle size={16}/> Execution Result</h4>
+                    <div className="p-4 border rounded" style={{ borderColor: 'var(--border-color)' }}>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-sm">Status: <strong>{remediation.execution.status}</strong></span>
+                      </div>
+                      <div className="code-block">
+                        {JSON.stringify(remediation.execution.result, null, 2)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h3 className="card-title"><CheckCircle className="icon" /> Verification</h3>
+            {!verification ? <p className="text-secondary text-sm">Verification not started.</p> : (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  {verification.verified ? <CheckCircle className="text-success" /> : <XCircle className="text-danger" />}
+                  <span className="font-bold">{verification.verification_status}</span>
+                </div>
+                <p className="text-sm mb-4">{verification.summary}</p>
+
+                <div className="flex-col gap-2">
+                  {verification.checks.map((chk: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center p-3 border rounded text-sm" style={{ borderColor: 'var(--border-color)' }}>
+                      <div>
+                        <div className="font-medium">{chk.name}</div>
+                        <div className="text-xs text-secondary mt-1">Observed: {chk.observed} | Expected: {chk.expected}</div>
+                      </div>
+                      <div>
+                        {chk.passed ? <span className="badge badge-success">Passed</span> : <span className="badge badge-danger">Failed</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}

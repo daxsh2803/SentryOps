@@ -148,4 +148,27 @@ This phase introduces a Verification Agent that runs after a remediation action 
 - **Safety Boundaries**: Verification is read-only and deterministic. No LLM controls execution or arbitrary bash scripts.
 
 ### Limitations
-- Phase 10 remains intentionally deferred.
+- Phase 11 remains intentionally deferred.
+
+## Phase 10: Operator Dashboard / UI (Implemented)
+The frontend dashboard gives operators full visibility into the incident response lifecycle.
+
+### Capabilities
+- **Incident Overview:** Search and filter incidents by status and severity.
+- **Incident Details:** Deep dive into timeline events, collected evidence, and RCA.
+- **Remediation & Risk Assessment:** View proposed actions, along with deterministic risk levels.
+- **Human Approval Controls:** Operators can safely Approve or Reject actions directly from the dashboard.
+- **Execution & Verification:** View execution results and post-action verification checks.
+- **Service Health:** Real-time simulated service health stats.
+
+### How to Run the Frontend
+``bash
+cd frontend
+npm install
+npm run dev
+``
+
+*Note: The frontend expects the backend to be running on http://localhost:8000. You can configure this via the VITE_API_URL environment variable if needed.*
+
+### Operator Actions & Safety Boundary
+The frontend only communicates with the backend via REST API endpoints. All remediation execution remains securely restricted to backend infrastructure and risk engine gates. The dashboard NEVER executes infrastructure commands directly.

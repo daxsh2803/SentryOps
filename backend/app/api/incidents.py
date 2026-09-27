@@ -311,6 +311,53 @@ def get_remediation(incident_id: str, db: Session = Depends(get_db)):
         } if execution else None
     }
 
+@router.get('/incidents/{incident_id}/rca')
+def get_rca(incident_id: str, db: Session = Depends(get_db)):
+    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    from app.models.all import RootCause
+    rc = db.query(RootCause).filter(RootCause.incident_id == incident.id).order_by(RootCause.id.desc()).first()
+    if not rc:
+        return {}
+    return {
+        "id": rc.id,
+        "root_cause": rc.root_cause,
+        "confidence": rc.confidence,
+        "evidence_ids": rc.evidence_ids,
+        "status": rc.status,
+        "identified_at": rc.identified_at
+    }
+
+@router.get('/incidents/{incident_id}/risk')
+def get_risk(incident_id: str, db: Session = Depends(get_db)):
+    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    remediation = db.query(Remediation).filter(Remediation.incident_id == incident.id).order_by(Remediation.id.desc()).first()
+    if not remediation:
+        return {}
+
+    from app.services.remediation import evaluate_risk
+    from app.schemas.all import RemediationProposal
+    proposal = RemediationProposal(
+        action_type=remediation.action_type,
+        target_service=remediation.parameters.get("target_service", "unknown"),
+        parameters=remediation.parameters,
+        reason=remediation.description or "",
+        evidence_ids=[],
+        confidence=1.0
+    )
+    risk_assessment = evaluate_risk(proposal)
+    return risk_assessment.model_dump()
+
+@router.get('/service-health/{service}')
+def get_service_health(service: str):
+    from app.services.remediation import get_simulated_state
+    return get_simulated_state(service)
+
 from app.ai.graph import graph
 from app.ai.state import InvestigationState
 from app.schemas.all import AIInvestigationResponse
