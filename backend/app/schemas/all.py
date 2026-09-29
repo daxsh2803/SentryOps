@@ -146,3 +146,66 @@ class EvaluationResult(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ReplayStageSnapshot(BaseModel):
+    stage: str
+    available: bool
+    status: Optional[str] = None
+    summary: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+class HistoricalAction(BaseModel):
+    action_type: str
+    target_service: Optional[str] = None
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    recorded_status: Optional[str] = None
+    approval_status: Optional[str] = None
+    execution_status: Optional[str] = None
+    execution_result: Optional[str] = None
+    executed: bool = False
+    note: str = "Historical record only; replay never executes remediation."
+
+class ReplayDifference(BaseModel):
+    field: str
+    original: Optional[str] = None
+    replay: Optional[str] = None
+    consistent: bool
+    details: Optional[str] = None
+
+class IncidentReplayResult(BaseModel):
+    replay_id: str
+    incident_id: str
+    incident_status: str
+    replay_consistency: str
+    summary: str
+    stages: List[ReplayStageSnapshot]
+    differences: List[ReplayDifference]
+    historical_actions: List[HistoricalAction]
+    replayed_at: datetime
+
+class PostmortemTimelineEntry(BaseModel):
+    timestamp: Optional[datetime] = None
+    stage: str
+    event: str
+    source: Optional[str] = None
+    message: Optional[str] = None
+
+class PostmortemSection(BaseModel):
+    section: str
+    available: bool
+    summary: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+class PostmortemResult(BaseModel):
+    postmortem_id: str
+    incident_id: str
+    title: str
+    severity: str
+    affected_service: Optional[str] = None
+    final_status: str
+    generated_at: datetime
+    summary: str
+    impact: str
+    timeline: List[PostmortemTimelineEntry]
+    sections: List[PostmortemSection]
+    lessons: List[str]

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { ArrowLeft, Activity, Shield, CheckCircle, XCircle, AlertTriangle, FileText, Database, Server } from 'lucide-react';
+import { ArrowLeft, Activity, Shield, CheckCircle, XCircle, AlertTriangle, FileText, Database, Server, History, BookOpen, GitCompare } from 'lucide-react';
 
 function ServiceHealth({ service }: { service: string }) {
   const [health, setHealth] = useState<any>(null);
@@ -57,6 +57,8 @@ export function IncidentDetail() {
   const [risk, setRisk] = useState<any>(null);
   const [verification, setVerification] = useState<any>(null);
   const [evaluation, setEvaluation] = useState<any>(null);
+  const [replay, setReplay] = useState<any>(null);
+  const [postmortem, setPostmortem] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
@@ -64,7 +66,7 @@ export function IncidentDetail() {
   const fetchAll = async () => {
     if (!id) return;
     try {
-      const [incRes, timeRes, evRes, rcaRes, remRes, riskRes, verifRes, evalRes] = await Promise.all([
+      const [incRes, timeRes, evRes, rcaRes, remRes, riskRes, verifRes, evalRes, replayRes, pmRes] = await Promise.all([
         api.getIncident(id).catch(() => null),
         api.getTimeline(id).catch(() => []),
         api.getEvidence(id).catch(() => []),
@@ -72,7 +74,9 @@ export function IncidentDetail() {
         api.getRemediation(id).catch(() => null),
         api.getRisk(id).catch(() => null),
         api.getVerification(id).catch(() => null),
-        api.getEvaluation(id).catch(() => null)
+        api.getEvaluation(id).catch(() => null),
+        api.getReplay(id).catch(() => null),
+        api.getPostmortem(id).catch(() => null)
       ]);
 
       setIncident(incRes);
@@ -83,6 +87,8 @@ export function IncidentDetail() {
       setRisk(riskRes?.risk_level ? riskRes : null);
       setVerification(verifRes?.id ? verifRes : null);
       setEvaluation(evalRes?.evaluation_id ? evalRes : null);
+      setReplay(replayRes?.replay_id ? replayRes : null);
+      setPostmortem(pmRes?.postmortem_id ? pmRes : null);
     } catch (e) {
       console.error(e);
     } finally {
@@ -367,6 +373,145 @@ export function IncidentDetail() {
                     <ul className="text-xs text-secondary" style={{ paddingLeft: '1.25rem' }}>
                       {evaluation.recommendations.map((rec: string, i: number) => (
                         <li key={i} className="mb-1">{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title"><History className="icon" /> Incident Replay</h3>
+              {replay && (
+                <span className={`badge ${
+                  replay.replay_consistency === 'MATCH' ? 'badge-success' :
+                  replay.replay_consistency === 'MISMATCH' ? 'badge-danger' : 'badge-neutral'
+                }`}>
+                  {replay.replay_consistency}
+                </span>
+              )}
+            </div>
+
+            {!replay ? (
+              <p className="text-secondary text-sm">Replay not available.</p>
+            ) : (
+              <div>
+                <p className="text-sm mb-2">{replay.summary}</p>
+                <div className="text-xs text-secondary mb-4">
+                  Read-only reconstruction — no remediation is re-executed.
+                </div>
+
+                {replay.historical_actions?.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="font-bold text-sm mb-2">Historical Actions</h4>
+                    {replay.historical_actions.map((act: any, i: number) => (
+                      <div key={i} className="p-3 border rounded text-sm mb-2" style={{ borderColor: 'var(--border-color)' }}>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-mono">{act.action_type}</span>
+                          <span className="badge badge-neutral">{act.execution_status || 'NOT EXECUTED'}</span>
+                        </div>
+                        <div className="text-xs text-secondary">Target: {act.target_service || '-'}</div>
+                        <div className="text-xs text-secondary mt-1">{act.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {replay.differences?.length > 0 ? (
+                  <div className="mb-4">
+                    <h4 className="font-bold text-sm mb-2"><GitCompare size={14} /> Original vs Replay</h4>
+                    <div className="flex-col gap-2">
+                      {replay.differences.map((diff: any, i: number) => (
+                        <div key={i} className="p-2 border rounded text-xs" style={{ borderColor: 'var(--border-color)' }}>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-medium">{diff.field}</span>
+                            {diff.consistent
+                              ? <span className="badge badge-success">Match</span>
+                              : <span className="badge badge-danger">Mismatch</span>}
+                          </div>
+                          <div className="text-secondary">Original: {diff.original ?? 'n/a'}</div>
+                          <div className="text-secondary">Replay: {diff.replay ?? 'n/a'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-secondary text-xs mb-4">No comparable artifacts recorded yet.</p>
+                )}
+
+                <h4 className="font-bold text-sm mb-2">Reconstructed Stages</h4>
+                <div className="flex-col gap-2">
+                  {replay.stages?.map((st: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center p-2 border rounded text-xs" style={{ borderColor: 'var(--border-color)' }}>
+                      <div>
+                        <div className="font-medium">{st.stage}</div>
+                        <div className="text-secondary mt-1">{st.summary}</div>
+                      </div>
+                      <div>
+                        {st.available
+                          ? <span className="badge badge-success">Available</span>
+                          : <span className="badge badge-neutral">Missing</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title"><BookOpen className="icon" /> Postmortem</h3>
+              {postmortem && <span className="badge badge-neutral">{postmortem.final_status}</span>}
+            </div>
+
+            {!postmortem ? (
+              <p className="text-secondary text-sm">Postmortem not available.</p>
+            ) : (
+              <div>
+                <p className="text-sm mb-2">{postmortem.summary}</p>
+                <p className="text-xs text-secondary mb-4">{postmortem.impact}</p>
+
+                {postmortem.timeline?.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="font-bold text-sm mb-2">Timeline</h4>
+                    <div className="timeline-container">
+                      {postmortem.timeline.map((entry: any, i: number) => (
+                        <div key={i} className="timeline-item">
+                          <div className="font-medium text-sm">{entry.event}</div>
+                          <div className="text-xs text-secondary">
+                            {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'Timestamp unavailable'}
+                          </div>
+                          {entry.message && <div className="text-xs mt-1 text-muted">{entry.message}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <h4 className="font-bold text-sm mb-2">Sections</h4>
+                <div className="flex-col gap-2 mb-4">
+                  {postmortem.sections?.map((sec: any, i: number) => (
+                    <div key={i} className="p-3 border rounded text-xs" style={{ borderColor: 'var(--border-color)' }}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-medium">{sec.section}</span>
+                        {sec.available
+                          ? <span className="badge badge-success">Available</span>
+                          : <span className="badge badge-neutral">Missing</span>}
+                      </div>
+                      <div className="text-secondary">{sec.summary}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {postmortem.lessons?.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-sm mb-2">Lessons / Recommendations</h4>
+                    <ul className="text-xs text-secondary" style={{ paddingLeft: '1.25rem' }}>
+                      {postmortem.lessons.map((lesson: string, i: number) => (
+                        <li key={i} className="mb-1">{lesson}</li>
                       ))}
                     </ul>
                   </div>

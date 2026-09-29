@@ -57,5 +57,13 @@ export const api = {
   getEvaluation: async (id: string) => {
     const res = await apiClient.get(`/incidents/${id}/evaluation`);
     return res.data;
+  },
+  getReplay: async (id: string) => {
+    const res = await apiClient.get(`/incidents/${id}/replay`);
+    return res.data;
+  },
+  getPostmortem: async (id: string) => {
+    const res = await apiClient.get(`/incidents/${id}/postmortem`);
+    return res.data;
   }
 };

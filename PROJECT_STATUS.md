@@ -18,6 +18,7 @@ Autonomous Multi-Agent Production Incident Response and Root Cause Analysis Plat
 | **Phase 9** | Verification Agent | Completed | Post-action verification, deterministic checks, state transition |
 | **Phase 10** | Operator Dashboard / UI | Completed | React 19, TypeScript, Vite, responsive SRE incident UI |
 | **Phase 11** | Incident Evaluation Framework | Completed | Deterministic 4-dimension evaluation, API & UI integration |
+| **Phase 12** | Incident Replay & Postmortems | Completed | Read-only deterministic replay, structured postmortem, API & UI integration |
 
 ---
 
@@ -99,6 +100,34 @@ The Evaluation Framework evaluates the completed incident-response lifecycle. It
 
 ---
 
+## Phase 12 — Incident Replay & Postmortems Details
+
+### Purpose
+Phase 12 turns a completed incident into a reproducible historical artifact. It reconstructs the incident lifecycle from persisted records, re-runs the deterministic analysis, compares the result against what was recorded, and assembles a structured postmortem. It is entirely read-only.
+
+### Replay (`app/services/replay.py`)
+- Collects the persisted lifecycle via the shared read-only collector `app/services/history.py`.
+- Reconstructs stages: incident, evidence, investigation, RCA, remediation, risk, approval, execution, verification, evaluation.
+- Re-runs deterministic analysis: risk policy (`evaluate_risk`) and evaluation (`evaluate_incident(..., persist=False)`).
+- Emits `IncidentReplayResult` with `replay_consistency` of `MATCH`, `MISMATCH`, or `INCOMPLETE`, plus an explicit original-vs-replay `differences` list.
+- Recorded remediation actions are exposed only as `historical_actions`; they are never executed.
+
+### Postmortem (`app/services/postmortem.py`)
+- Deterministically assembled from persisted data with no LLM required for correctness.
+- Sections: DETECTION, INVESTIGATION, EVIDENCE, ROOT_CAUSE, REMEDIATION, APPROVAL, EXECUTION, VERIFICATION, EVALUATION, plus a top-level summary, impact, timeline, and lessons/recommendations.
+- The timeline uses only persisted timestamps; entries lacking a timestamp are reported honestly (`timestamp=None`) and sorted last rather than fabricated.
+
+### Safety Boundaries
+1. Replay and postmortem never execute remediation (`RESTART_SERVICE`, `SCALE_SERVICE`, `ROLLBACK_SERVICE`) — historical actions are treated as data only.
+2. No infrastructure access or mutation: no Docker/Kubernetes/AWS/shell/SSH, and simulated infrastructure state is untouched.
+3. No database writes: both services only read persisted records.
+
+### API Endpoints
+- `GET /incidents/{incident_id}/replay`: read-only deterministic replay result.
+- `GET /incidents/{incident_id}/postmortem`: read-only deterministic postmortem document.
+
+---
+
 ## Safety Boundaries
 
 1. **No Infrastructure Commands**: The evaluator cannot execute shell commands or infrastructure actions.
@@ -112,6 +141,8 @@ The Evaluation Framework evaluates the completed incident-response lifecycle. It
 ## API Endpoints
 
 - `GET /incidents/{incident_id}/evaluation`: Deterministically computes and returns structured `EvaluationResult`.
+- `GET /incidents/{incident_id}/replay`: Read-only deterministic incident replay (`IncidentReplayResult`).
+- `GET /incidents/{incident_id}/postmortem`: Read-only deterministic postmortem (`PostmortemResult`).
 - `GET /incidents`: List incidents with status and severity filters.
 - `GET /incidents/{incident_id}`: Incident details.
 - `GET /incidents/{incident_id}/timeline`: Chronological event log.
@@ -139,5 +170,7 @@ The Evaluation Framework evaluates the completed incident-response lifecycle. It
   - Linting (`oxlint`): 0 errors
   - Type checking (`tsc -b`): 0 errors
   - Production build (`vite build`): Succeeded (dist output generated cleanly)
+- **Phase 12 Tests**:
+  - `tests/test_phase12_replay_postmortem.py`: 19 passed (replay consistency, deterministic replay, mismatch detection, read-only guarantees, historical-action safety, postmortem sections/timeline/no-fabrication, 404 handling)
 - **Whitespace / Git Checks**:
   - `git diff --check`: no whitespace errors

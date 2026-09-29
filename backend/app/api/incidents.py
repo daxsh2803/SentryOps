@@ -538,3 +538,15 @@ def get_incident_evaluation(incident_id: str, db: Session = Depends(get_db)):
     from app.services.evaluation import evaluate_incident
     eval_result = evaluate_incident(incident, db, persist=False)
     return eval_result.model_dump()
+
+@router.get('/incidents/{incident_id}/replay')
+def get_incident_replay(incident_id: str, db: Session = Depends(get_db)):
+    # Read-only deterministic replay; never executes remediation or mutates state.
+    from app.services.replay import get_incident_replay_by_id
+    return get_incident_replay_by_id(incident_id, db).model_dump()
+
+@router.get('/incidents/{incident_id}/postmortem')
+def get_incident_postmortem(incident_id: str, db: Session = Depends(get_db)):
+    # Read-only deterministic postmortem assembled from persisted incident data.
+    from app.services.postmortem import get_incident_postmortem_by_id
+    return get_incident_postmortem_by_id(incident_id, db).model_dump()
