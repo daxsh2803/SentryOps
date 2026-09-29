@@ -19,6 +19,7 @@ Autonomous Multi-Agent Production Incident Response and Root Cause Analysis Plat
 | **Phase 10** | Operator Dashboard / UI | Completed | React 19, TypeScript, Vite, responsive SRE incident UI |
 | **Phase 11** | Incident Evaluation Framework | Completed | Deterministic 4-dimension evaluation, API & UI integration |
 | **Phase 12** | Incident Replay & Postmortems | Completed | Read-only deterministic replay, structured postmortem, API & UI integration |
+| **Phase 13** | Kubernetes Deployment | Completed | `k8s/` manifests, dedicated namespace, StatefulSet+PVC database, probes, local-cluster docs |
 
 ---
 
@@ -128,6 +129,45 @@ Phase 12 turns a completed incident into a reproducible historical artifact. It 
 
 ---
 
+## Phase 13 — Kubernetes Deployment Details
+
+### Purpose
+Phase 13 makes SentryOps deployable to a **local** Kubernetes cluster (Minikube, kind, or Docker Desktop Kubernetes) while preserving the existing application architecture. It is deployment infrastructure only — not autonomous Kubernetes remediation. Full guide: `docs/kubernetes.md`.
+
+### Workloads (namespace `sentryops`)
+| Kind | Workloads |
+|---|---|
+| StatefulSet | `postgres` (pgvector, StatefulSet + `volumeClaimTemplates` PVC) |
+| Deployment | `redis`, `backend`, `frontend` |
+| Deployment | `api-gateway`, `order-service`, `payment-service`, `notification-service`, `user-service`, `fault-injection` |
+| Deployment | `prometheus`, `loki`, `jaeger`, `grafana` |
+
+### Configuration
+- `sentryops-config`: shared non-secret values (`POSTGRES_*`, `REDIS_URL`).
+- `backend-config`: `LOKI_URL` (query base), `PROMETHEUS_URL`, `JAEGER_URL`, `FAULT_API_URL`, `MOCK_LLM`.
+- `microservices-config`: `LOKI_URL` (**push** URL), `OTLP_ENDPOINT`, downstream service URLs.
+- `sentryops-secrets`: `POSTGRES_PASSWORD`, `DATABASE_URL` (documented local-dev placeholders).
+- `LOKI_URL` deliberately differs between the backend and the microservices (query base vs push endpoint).
+
+### Storage, Networking, Health
+- PostgreSQL persists via `volumeClaimTemplates` (2Gi RWO); Redis and the observability stack use `emptyDir` (documented limitation).
+- ClusterIP for all internal services; only the frontend is exposed (`NodePort 30080`). nginx reverse-proxies `/api` to `backend:8000`, so the browser stays same-origin and no CORS change was required.
+- Readiness and liveness probes reuse the existing `/health` endpoints; the backend also has a startup probe. Dependency ordering uses init containers that poll readiness instead of `depends_on` or blind sleeps.
+
+### Deployment Commands
+```bash
+scripts/k8s-build-images.sh   # build + load the eight application images (no registry)
+scripts/k8s-deploy.sh         # namespace + observability ConfigMaps + kubectl apply -k k8s/
+```
+
+### Safety Boundaries
+1. **No RBAC objects**: no Role, RoleBinding, ClusterRole, ClusterRoleBinding or ServiceAccount is created; nothing references `cluster-admin`.
+2. **No cluster credentials in containers**: every application pod sets `automountServiceAccountToken: false`.
+3. **No kubectl from workloads**: no image, command or argument invokes `kubectl` or a Kubernetes client; no privileged containers, `hostPath` or `hostNetwork`.
+4. **Remediation boundary unchanged**: the allow-list → risk → approval → controlled action → verification chain is untouched. `LLM → kubectl` is explicitly not implemented.
+
+---
+
 ## Safety Boundaries
 
 1. **No Infrastructure Commands**: The evaluator cannot execute shell commands or infrastructure actions.
@@ -172,5 +212,7 @@ Phase 12 turns a completed incident into a reproducible historical artifact. It 
   - Production build (`vite build`): Succeeded (dist output generated cleanly)
 - **Phase 12 Tests**:
   - `tests/test_phase12_replay_postmortem.py`: 19 passed (replay consistency, deterministic replay, mismatch detection, read-only guarantees, historical-action safety, postmortem sections/timeline/no-fabrication, 404 handling)
+- **Phase 13 Tests**:
+  - `tests/test_phase13_kubernetes.py`: 84 passed (manifest/config/probe/persistence/security/regression assertions)
 - **Whitespace / Git Checks**:
   - `git diff --check`: no whitespace errors

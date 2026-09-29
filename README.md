@@ -2,23 +2,24 @@
 
 Autonomous Multi-Agent Production Incident Response and Root Cause Analysis Platform.
 
-## Current Phase: Phase 0 (Foundation)
-This phase establishes the foundational structure for the project.
+## Current Phase: Phase 13 (Kubernetes Deployment)
+SentryOps can now be deployed to a local Kubernetes cluster. See
+[docs/kubernetes.md](docs/kubernetes.md) for the full workflow.
 
-### Architecture Guidelines
-- **Microservices**: To be implemented in later phases.
-- **Observability**: To be added in later phases.
-- **Agents/LangGraph**: To be added in later phases.
-- **Fault Injection**: To be added in later phases.
-- **Evaluation**: To be added in later phases.
-- **Infrastructure**: To be expanded in later phases.
+### What currently exists
+- **Simulated production**: five FastAPI microservices plus a fault-injection API.
+- **Observability**: OpenTelemetry, Prometheus, Grafana, Jaeger, Loki.
+- **Incident response**: detection, AI investigation agents, evidence, RCA, RAG.
+- **Controlled remediation**: deterministic risk engine, approval gate, execution, verification.
+- **Assessment**: deterministic evaluation, incident replay, postmortem generation.
+- **Deployment**: Docker Compose (Phases 0-12) and local Kubernetes (Phase 13).
 
-## Technology Stack (Target)
+## Technology Stack
 - **Backend**: Python, FastAPI, LangGraph, Pydantic
-- **Frontend**: React, TypeScript
+- **Frontend**: React, TypeScript, Vite
 - **Database**: PostgreSQL with pgvector, Redis
 - **Observability**: OpenTelemetry, Prometheus, Grafana, Jaeger, Loki
-- **Infrastructure**: Docker, Docker Compose
+- **Infrastructure**: Docker, Docker Compose, Kubernetes (local)
 
 
 ## Phase 3 (Fault Injection)
@@ -173,6 +174,23 @@ npm run dev
 ### Operator Actions & Safety Boundary
 The frontend only communicates with the backend via REST API endpoints. All remediation execution remains securely restricted to backend infrastructure and risk engine gates. The dashboard NEVER executes infrastructure commands directly.
 
+## Phase 12: Incident Replay & Postmortems (Implemented)
+Turns a completed incident into a reproducible historical artifact.
+
+### Capabilities
+- **Deterministic replay**: reconstructs the persisted lifecycle (evidence, investigation, RCA, remediation, risk, approval, execution, verification, evaluation), re-runs the deterministic risk policy and evaluation, and reports `MATCH` / `MISMATCH` / `INCOMPLETE` with an explicit original-vs-replay difference list.
+- **Structured postmortem**: deterministic summary, impact, timeline, sections (detection, investigation, evidence, root cause, remediation, approval, execution, verification, evaluation) and lessons.
+- **Deterministic by design**: correctness comes from persisted data, not from an LLM. Missing timestamps are reported as `null`, never invented.
+
+### API Endpoints
+- `GET /incidents/{incident_id}/replay`
+- `GET /incidents/{incident_id}/postmortem`
+
+### Safety Boundaries
+- **Read-only**: neither replay nor postmortem writes to the database.
+- **No execution**: historical remediation actions are data only; replaying `RESTART_SERVICE`, `SCALE_SERVICE` or `ROLLBACK_SERVICE` never executes them.
+- **No infrastructure access**: no Docker/Kubernetes/AWS/shell/SSH, and simulated infrastructure state is untouched.
+
 ## Phase 11: Incident Evaluation Framework (Implemented)
 This phase introduces an automated, deterministic Incident Evaluation Framework that evaluates the quality, completeness, and internal consistency of the entire incident response lifecycle.
 
@@ -214,3 +232,34 @@ DETECTION -> INVESTIGATION -> EVIDENCE -> RCA -> REMEDIATION -> RISK -> APPROVAL
 - **No Remediation Control**: The evaluator cannot approve or reject remediation proposals.
 - **Side-Effect Free**: Does not modify simulated production state.
 - **Deterministic**: Does not rely on unconstrained LLM output for safety-critical checks. Evaluation does NOT control remediation execution.
+
+## Phase 13: Kubernetes Deployment (Implemented)
+Deploys the existing SentryOps stack to a **local** Kubernetes cluster (Minikube, kind, or Docker Desktop Kubernetes). Full guide: [docs/kubernetes.md](docs/kubernetes.md).
+
+### Capabilities
+- **Manifests** under `k8s/`, applied as one kustomization into a dedicated `sentryops` namespace.
+- **Workloads**: PostgreSQL (StatefulSet + PVC), Redis, backend, frontend, five simulated-production microservices, fault injection, Prometheus, Loki, Jaeger, Grafana.
+- **Configuration separated from images**: three ConfigMaps plus a Secret, with environment-specific values injected at runtime.
+- **Persistence**: PostgreSQL uses a `volumeClaimTemplates` PVC so data survives pod replacement.
+- **Health**: readiness/liveness probes on the existing `/health` endpoints; startup probe for the backend.
+- **Startup ordering**: dependency readiness is awaited with init containers rather than `depends_on` or blind sleeps.
+- **Networking**: ClusterIP internally; only the frontend is exposed (NodePort `30080`) and nginx reverse-proxies `/api` to the backend, so no CORS change was needed.
+
+### Commands
+```bash
+scripts/k8s-build-images.sh   # build + load local images
+docs/kubernetes.md            # prerequisites, deploy, verify, teardown
+scripts/k8s-deploy.sh          # create ConfigMaps + kubectl apply -k k8s/
+```
+
+### Safety Boundaries
+- **No RBAC and no cluster-admin**: Phase 13 creates no Roles, RoleBindings or ServiceAccounts.
+- **No cluster credentials in containers**: every application pod sets `automountServiceAccountToken: false`.
+- **No kubectl from workloads**: no image, command or argument invokes `kubectl` or a Kubernetes client.
+- **Remediation boundary unchanged**: Kubernetes is deployment infrastructure, not an AI execution path. `LLM -> kubectl` is explicitly not implemented.
+
+### Known Limitations
+- Observability storage is ephemeral (`emptyDir`) and images use `:latest`, matching `docker-compose.yml`.
+- No ingress controller, no HPA, no PodDisruptionBudgets.
+- One replica per workload; scaling is possible but not automated.
+- Cloud Kubernetes (EKS/GKE/AKS), Terraform and GitOps are out of scope and belong to a later phase.

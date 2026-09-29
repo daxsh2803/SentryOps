@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - prometheus.yaml
+  - loki.yaml
+  - jaeger.yaml
+  - grafana.yaml
+
+# NOTE: the `prometheus-config`, `loki-config` and `grafana-*` ConfigMaps are
+# NOT declared here.
+#
+# They are built from the same files the Docker Compose stack uses
+# (observability/prometheus/prometheus.yml, observability/loki/loki-config.yml,
+# observability/grafana/...), which keeps a single source of truth and avoids
+# duplicating observability configuration.
+#
+# kustomize refuses to read files that live outside its own root directory, so
+# these ConfigMaps are created by scripts/k8s-deploy.sh (or the equivalent
+# `kubectl create configmap` commands in docs/kubernetes.md) before the rest of
+# the manifests are applied.

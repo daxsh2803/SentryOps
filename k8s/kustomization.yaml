@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Every namespaced resource is forced into the dedicated namespace, so the
+# default namespace is never used for application workloads.
+namespace: sentryops
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres
+  - redis
+  - backend
+  - frontend
+  - simulated-production
+  - observability
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: sentryops
+    includeSelectors: false

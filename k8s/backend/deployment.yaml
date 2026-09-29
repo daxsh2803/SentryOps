@@ -1,0 +1,95 @@
+# Incident-management backend (FastAPI + LangGraph) built from ./backend.
+#
+# Startup ordering: Docker Compose used `depends_on: service_healthy`. Kubernetes
+# has no equivalent, so an init container polls PostgreSQL readiness instead of a
+# blind `sleep`. The application itself is unchanged.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: sentryops
+  labels:
+    app: backend
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/component: api
+    spec:
+      # The application makes no Kubernetes API calls; never mount a token.
+      automountServiceAccountToken: false
+      initContainers:
+        - name: wait-for-postgres
+          image: pgvector/pgvector:pg16
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
+                echo "waiting for postgres at ${POSTGRES_HOST}:${POSTGRES_PORT} ..."
+                sleep 2
+              done
+          envFrom:
+            - configMapRef:
+                name: sentryops-config
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+      containers:
+        - name: backend
+          image: sentryops/backend:local
+          # Locally built images are never pushed to a registry in Phase 13.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: sentryops-config
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: sentryops-secrets
+          # LangGraph/FastAPI import work is slow enough to need a startup probe.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi

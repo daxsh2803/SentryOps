@@ -1,0 +1,19 @@
+# ClusterIP only: the backend is reached through the frontend's same-origin
+# /api proxy. Nothing else needs to expose it, so it stays unexposed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: sentryops
+  labels:
+    app: backend
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

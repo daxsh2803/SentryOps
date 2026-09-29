@@ -1,0 +1,56 @@
+# Non-secret configuration for SentryOps.
+#
+# Three ConfigMaps are used because a few keys legitimately differ per workload:
+#   * sentryops-config      - values shared by every workload
+#   * backend-config        - incident backend / AI investigation agents
+#   * microservices-config  - simulated production services
+#
+# The important divergence is LOKI_URL:
+#   * the Python microservices build a Loki *push* client  -> http://loki:3100/loki/api/v1/push
+#   * the backend log agent issues LogQL *queries*         -> http://loki:3100
+# Putting LOKI_URL in a single shared ConfigMap would break one of the two.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentryops-config
+  namespace: sentryops
+  labels:
+    app.kubernetes.io/part-of: sentryops
+data:
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: sentryops
+  POSTGRES_USER: sentryops
+  REDIS_URL: redis://redis:6379/0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: sentryops
+  labels:
+    app.kubernetes.io/part-of: sentryops
+    app.kubernetes.io/component: backend
+data:
+  LOKI_URL: http://loki:3100
+  PROMETHEUS_URL: http://prometheus:9090
+  JAEGER_URL: http://jaeger:16686
+  FAULT_API_URL: http://fault-injection:8005
+  # The platform runs against a deterministic mock LLM unless a real key is provided.
+  MOCK_LLM: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: microservices-config
+  namespace: sentryops
+  labels:
+    app.kubernetes.io/part-of: sentryops
+    app.kubernetes.io/component: simulated-production
+data:
+  LOKI_URL: http://loki:3100/loki/api/v1/push
+  OTLP_ENDPOINT: http://jaeger:4317
+  ORDER_SERVICE_URL: http://order-service:8001
+  PAYMENT_SERVICE_URL: http://payment-service:8002
+  NOTIFICATION_SERVICE_URL: http://notification-service:8003
