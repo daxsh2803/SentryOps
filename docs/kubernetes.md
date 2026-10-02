@@ -413,3 +413,22 @@ AI decision -> structured action -> deterministic allow-list -> risk engine
 Kubernetes does **not** become a new path in that chain. If a future phase adds
 autonomous Kubernetes remediation, it must pass through the same allow-list,
 risk and approval gates — never `LLM -> kubectl`.
+
+---
+
+## 14. Metrics Server (Phase 14)
+
+SentryOps includes the Kubernetes Metrics Server, allowing resource utilization tracking.
+
+**Purpose**: The Metrics Server supplies resource metrics (CPU and Memory) to Kubernetes APIs like `kubectl top` and Horizontal Pod Autoscaler (HPA). Note that it does *not* automatically configure Prometheus dashboards or alerting.
+
+**Deployment**: The metrics server is deployed automatically as part of `scripts/k8s-deploy.sh` using kustomize and is isolated in the `kube-system` namespace. The `k8s/metrics-server/kustomization.yaml` fetches the official manifest and patches it to support the local kind cluster (`--kubelet-insecure-tls`).
+
+**Verification**:
+```bash
+kubectl top nodes
+kubectl top pods -n sentryops
+```
+
+**Known limitations**:
+- The `--kubelet-insecure-tls` flag is insecure for production and must be removed if this configuration is adopted for cloud environments.
