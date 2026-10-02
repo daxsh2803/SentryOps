@@ -58,7 +58,7 @@ load_image() {
 
   # kind runs nodes as containers with their own image store.
   if command -v kind >/dev/null 2>&1 && [ -n "$(kind get clusters 2>/dev/null)" ]; then
-    kind load docker-image "${image}"
+    kind load docker-image --name "${KIND_CLUSTER:-sentryops}" "${image}"
     return
   fi
 

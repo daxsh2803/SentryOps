@@ -57,13 +57,13 @@ create_configmap grafana-dashboards \
 echo "==> applying kustomization"
 kubectl apply -k "${ROOT}/k8s"
 
+# PostgreSQL is a StatefulSet; the rest are Deployments. A rollout failure here
+# is a real failure, so it is deliberately NOT masked with `|| true`.
 echo "==> waiting for core workloads"
-for deployment in postgres redis backend frontend; do
-  echo "    waiting for deployment/${deployment}"
-  kubectl rollout status "deployment/${deployment}" -n "${NAMESPACE}" --timeout=180s || true
+for resource in statefulset/postgres deployment/redis deployment/backend deployment/frontend; do
+  echo "    waiting for ${resource}"
+  kubectl rollout status "${resource}" -n "${NAMESPACE}" --timeout=180s
 done
-# postgres is a StatefulSet, not a Deployment.
-kubectl rollout status "statefulset/postgres" -n "${NAMESPACE}" --timeout=180s || true
 
 cat <<EOF
 
