@@ -45,15 +45,15 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
+            timeoutSeconds: 10
+            failureThreshold: 5
           livenessProbe:
             httpGet:
               path: /health
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
-            timeoutSeconds: 3
+            timeoutSeconds: 10
             failureThreshold: 3
           resources:
             requests:

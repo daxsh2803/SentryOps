@@ -432,3 +432,67 @@ kubectl top pods -n sentryops
 
 **Known limitations**:
 - The `--kubelet-insecure-tls` flag is insecure for production and must be removed if this configuration is adopted for cloud environments.
+
+---
+
+## 15. Autoscaling and Rollback (Phase 15)
+
+Phase 15 introduces Horizontal Pod Autoscaling (HPA) for the core backend and automated rollback capabilities.
+
+### Backend HPA Configuration
+The backend deployment is configured with an HPA (\ackend-hpa\) in the \sentryops\ namespace.
+- **Minimum Replicas:** 1
+- **Maximum Replicas:** 3
+- **Target CPU Utilization:** 50%
+
+The HPA relies on the CPU requests defined in the backend deployment (\100m\). Scaling is triggered when the average CPU usage across pods exceeds 50% of this request (i.e., >50m).
+
+**Limitations in local environments:**
+Generating enough CPU load to trigger scaling in a local kind/minikube cluster requires a sustained, CPU-intensive workload. Simple HTTP pinging of \/health\ may not generate enough sustained CPU usage to cross the threshold, as Python's asyncio handles idle connections efficiently.
+
+### Inspecting HPA Status
+You can observe the HPA and current metrics using:
+\\\ash
+kubectl get hpa backend-hpa -n sentryops
+kubectl describe hpa backend-hpa -n sentryops
+kubectl top pods -l app=backend -n sentryops
+\\\
+
+### Validating Scaling (Manual Procedure)
+To safely demonstrate scaling without disrupting the cluster:
+1. Open a terminal and watch the HPA: \kubectl get hpa backend-hpa -n sentryops -w\
+2. In another terminal, generate a sustained workload. For example, continuously creating incidents to invoke the mock LLM graph:
+   \\\ash
+   while true; do
+     curl -X POST http://localhost:8000/incidents -H 'Content-Type: application/json' -d '{"title":"load test","severity":"LOW","affected_service":"user-service"}'
+   done
+   \\\
+3. Wait up to 60 seconds for the Metrics Server to collect data. The HPA should observe the CPU spike and increase the \REPLICAS\ count up to 3.
+4. Stop the loop. The HPA will eventually scale back down to 1 after a cooldown period (typically 5 minutes).
+
+### Rollback Procedure
+If a rollout fails or introduces critical bugs, you can safely revert all stateless application deployments to their previous revision.
+
+**Script:** \scripts/k8s-rollback.sh\
+
+**Usage:**
+\\\ash
+bash scripts/k8s-rollback.sh
+# Or, to skip the confirmation prompt:
+bash scripts/k8s-rollback.sh --yes
+\\\
+
+**What it does:**
+- Triggers \kubectl rollout undo\ for all application deployments (backend, frontend, microservices, fault-injection).
+- Waits for the rollback to complete successfully.
+
+**What it does NOT restore:**
+- It does **not** roll back databases (PostgreSQL), persistent volumes (PVCs), or observability infrastructure.
+- It does **not** revert structural YAML changes (e.g., deleted ConfigMaps). You must re-apply the previous configurations if they were modified.
+
+### Reliability Fixes
+During Phase 15, targeted probe adjustments were made to tolerate latency spikes in local clusters:
+- Increased `timeoutSeconds` to 10s for `readinessProbe` and `livenessProbe` on PostgreSQL, Redis, Loki, Grafana, and simulated microservices (api-gateway, user-service, notification-service, payment-service, order-service).
+- Increased `failureThreshold` to 5 for simulated microservices' `readinessProbe` to prevent transient restarts. `livenessProbe` failure threshold was kept at 3 to quickly detect genuine application crashes.
+- Note: These adjustments are manifest-only and have not yet been applied to the live cluster.
+- Unresolved: Grafana occasionally returns HTTP 503 during startup/initialization. The increased timeout reduces context deadline errors, but the 503s represent genuine application responses and may require further investigation or a dedicated startup probe if they cause instability.
