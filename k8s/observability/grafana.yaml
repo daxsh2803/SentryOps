@@ -36,11 +36,17 @@ spec:
           ports:
             - name: http
               containerPort: 3000
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 40
           readinessProbe:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 10
             failureThreshold: 6
@@ -48,7 +54,6 @@ spec:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: 45
             periodSeconds: 20
             timeoutSeconds: 10
             failureThreshold: 6
