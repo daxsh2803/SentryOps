@@ -105,6 +105,8 @@ def test_kustomization_resource_paths_exist():
         with open(path, encoding="utf-8") as handle:
             doc = yaml.safe_load(handle)
         for entry in doc.get("resources", []) or []:
+            if entry.startswith("http://") or entry.startswith("https://"):
+                continue
             assert os.path.exists(os.path.join(base, entry)), (
                 f"{os.path.relpath(path, REPO_ROOT)} references missing resource {entry}"
             )
