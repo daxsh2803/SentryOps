@@ -1,0 +1,34 @@
+{
+  "incident_id": "INC-8AA794",
+  "baseline": {
+    "success": 15,
+    "failed": 0,
+    "avg_latency": 1.7881796995798747
+  },
+  "incident": {
+    "success": 5,
+    "failed": 10,
+    "avg_latency": 1.4664226373036702
+  },
+  "post_remediation": {
+    "success": 15,
+    "failed": 0,
+    "avg_latency": 1.5315502166748047
+  },
+  "remediation_proposal": {
+    "remediation": {
+      "id": 7,
+      "action_type": "",
+      "description": "",
+      "status": "PENDING_APPROVAL",
+      "parameters": {
+        "target_service": ""
+      }
+    },
+    "approval": {
+      "id": 7,
+      "status": "PENDING_APPROVAL"
+    },
+    "execution": null
+  }
+}
