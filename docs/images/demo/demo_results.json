@@ -1,34 +1,76 @@
 {
-  "incident_id": "INC-8AA794",
+  "incident_id": "INC-CD90E2",
   "baseline": {
-    "success": 15,
+    "total": 10,
+    "success": 10,
     "failed": 0,
-    "avg_latency": 1.7881796995798747
+    "avg_latency_sec": 1.116
   },
   "incident": {
-    "success": 5,
+    "total": 10,
+    "success": 0,
     "failed": 10,
-    "avg_latency": 1.4664226373036702
+    "avg_latency_sec": 1.008
   },
   "post_remediation": {
-    "success": 15,
+    "total": 10,
+    "success": 10,
     "failed": 0,
-    "avg_latency": 1.5315502166748047
+    "avg_latency_sec": 1.051
   },
   "remediation_proposal": {
     "remediation": {
-      "id": 7,
-      "action_type": "",
-      "description": "",
+      "id": 21,
+      "action_type": "SCALE_SERVICE",
+      "description": "[DEMO FIXTURE - MOCK_LLM] Deterministic proposal for demonstration: Scale service replicas to 2 to alleviate traffic/latency load.",
       "status": "PENDING_APPROVAL",
       "parameters": {
-        "target_service": ""
+        "replicas": 2,
+        "target_service": "payment-service"
       }
     },
     "approval": {
-      "id": 7,
-      "status": "PENDING_APPROVAL"
+      "id": 21,
+      "status": "PENDING"
     },
     "execution": null
+  },
+  "risk_assessment": {
+    "risk_level": "MEDIUM",
+    "allowed": true,
+    "requires_approval": true,
+    "reasons": [
+      "SCALE_SERVICE requires strict validation and approval"
+    ]
+  },
+  "rejection_demo": {
+    "incident_id": "INC-28EE86",
+    "rejection_response": {
+      "status": "REJECTED",
+      "remediation_id": 22
+    },
+    "remediation_state": {
+      "remediation": {
+        "id": 22,
+        "action_type": "SCALE_SERVICE",
+        "description": "[DEMO FIXTURE - MOCK_LLM] Deterministic proposal for demonstration: Scale service replicas to 2 to alleviate traffic/latency load.",
+        "status": "PENDING_APPROVAL",
+        "parameters": {
+          "replicas": 2,
+          "target_service": "payment-service"
+        }
+      },
+      "approval": {
+        "id": 22,
+        "status": "REJECTED"
+      },
+      "execution": null
+    },
+    "incident_status": "INVESTIGATING"
+  },
+  "evidence_summary": {
+    "trace_evidence": "EV-TRACE-3F77AC",
+    "change_evidence": "EV-CHANGE-9964BD",
+    "infra_evidence": "EV-INFRA-5B1A7A"
   }
 }

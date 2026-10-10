@@ -252,7 +252,7 @@ export function IncidentDetail() {
                   </div>
                 )}
 
-                {incident.status === 'PENDING_APPROVAL' && (
+                {(incident.status === 'PENDING_APPROVAL' || remediation?.approval?.status === 'PENDING' || remediation?.approval?.status === 'PENDING_APPROVAL') && (
                   <div className="mt-6 flex gap-4 p-4 border rounded" style={{ borderColor: 'var(--warning)', background: 'rgba(245, 158, 11, 0.1)' }}>
                     <div className="flex-1">
                       <h4 className="font-bold text-warning mb-1">Approval Required</h4>
@@ -287,13 +287,17 @@ export function IncidentDetail() {
             {!verification ? <p className="text-secondary text-sm">Verification not started.</p> : (
               <div className="mt-4">
                 <div className="flex items-center gap-2 mb-4">
-                  {verification.verified ? <CheckCircle className="text-success" /> : <XCircle className="text-danger" />}
-                  <span className="font-bold">{verification.verification_status}</span>
+                  {(verification.verified ?? (verification.status === 'VERIFIED_SUCCESS')) ? (
+                    <CheckCircle className="text-success" />
+                  ) : (
+                    <XCircle className="text-danger" />
+                  )}
+                  <span className="font-bold">{verification.status || verification.verification_status}</span>
                 </div>
                 <p className="text-sm mb-4">{verification.summary}</p>
 
                 <div className="flex-col gap-2">
-                  {verification.checks.map((chk: any, i: number) => (
+                  {(verification.checks || verification.metrics?.checks || []).map((chk: any, i: number) => (
                     <div key={i} className="flex justify-between items-center p-3 border rounded text-sm" style={{ borderColor: 'var(--border-color)' }}>
                       <div>
                         <div className="font-medium">{chk.name}</div>

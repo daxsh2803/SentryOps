@@ -157,7 +157,7 @@ def approve_remediation(incident_id: str, payload: ApprovalCreate, db: Session =
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
-    approval = db.query(Approval).filter(Approval.incident_id == incident.id, Approval.status == 'PENDING').first()
+    approval = db.query(Approval).filter(Approval.incident_id == incident.id, Approval.status.in_(['PENDING', 'PENDING_APPROVAL'])).first()
     if not approval:
         raise HTTPException(status_code=404, detail="No pending approval found")
 
@@ -212,7 +212,8 @@ def approve_remediation(incident_id: str, payload: ApprovalCreate, db: Session =
         from app.models.all import Verification
 
         action_result.execution_id = str(execution.id)
-        state_stub = {"action_result": action_result.model_dump(), "evidence": [{"evidence_id": "api-action"}]}
+        ev_list = [{"evidence_id": ev.evidence_id} for ev in incident.evidence] if incident.evidence else [{"evidence_id": "api-action"}]
+        state_stub = {"action_result": action_result.model_dump(), "evidence": ev_list}
         verif_result = perform_verification(state_stub["action_result"], state_stub)
 
         verification = Verification(
@@ -257,7 +258,7 @@ def reject_remediation(incident_id: str, payload: ApprovalCreate, db: Session = 
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
-    approval = db.query(Approval).filter(Approval.incident_id == incident.id, Approval.status == 'PENDING').first()
+    approval = db.query(Approval).filter(Approval.incident_id == incident.id, Approval.status.in_(['PENDING', 'PENDING_APPROVAL'])).first()
     if not approval:
         raise HTTPException(status_code=404, detail="No pending approval found")
 
@@ -480,7 +481,7 @@ def ai_investigate_incident(incident_id: str, db: Session = Depends(get_db)):
                 db_approval = Approval(
                     incident_id=incident.id,
                     remediation_id=db_remediation.id,
-                    status=final_state.get("approval_status", "PENDING")
+                    status="PENDING"
                 )
                 db.add(db_approval)
 
