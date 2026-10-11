@@ -61,6 +61,7 @@
 ```
 
 - **Anti-Hallucination Gate**: The RCA Agent strictly verifies that all cited evidence IDs exist in the incident evidence store before generating conclusions.
+- **Input-to-Output Flow Summary**: Telemetry & Signals (Input) ➔ Parallel Investigation ➔ Risk Gate & Verification (Output).
 
 ---
 
@@ -79,7 +80,82 @@
 
 ---
 
-## Slide 6: Observable Telemetry & Operator Dashboard
+## Slide 6: Project Input: What Goes Into SentryOps?
+### Production Telemetry, Incident Signals, System Context & Operational Boundaries
+
+```text
+┌─────────────────────────────┐   ┌─────────────────────────────┐
+│ Telemetry: Prom + Loki + Jg │ + │ Context: Faults + Runbooks  │
+└──────────────┬──────────────┘   └──────────────┬──────────────┘
+               └───────────────┬─────────────────┘
+                               ▼
+   [ LangGraph Multi-Agent Parallel Investigation Engine ]
+```
+
+#### Four Input Categories:
+1. **A. Production Telemetry (Continuous Observability)**:
+   - **Prometheus Metrics**: Request throughput, HTTP 5xx error rate, service health, and P95 latency across all services.
+   - **Loki Logs**: Structured application error logs, stack traces, and exception details streamed by service name.
+   - **Jaeger Traces**: End-to-end distributed traces capturing execution paths and isolating failed downstream spans.
+2. **B. Incident and Failure Signals (Anomaly Triggers)**:
+   - Live microservice failures, HTTP 500 error spikes, and latency anomalies.
+   - Fault-injection scenarios (`http_500_spike`, crash, latency) injected via port 8005 in controlled demonstration.
+3. **C. Incident Context & Knowledge Base (RAG)**:
+   - Incident identifiers (`INC-CD90E2`), affected service (`payment-service`), timestamp, and status.
+   - Collected evidence store linking metrics, logs, traces, and fault metadata.
+   - Top-k historical runbooks and postmortems retrieved from PostgreSQL via pgvector semantic search (`EVID-KNOW-6750`).
+4. **D. Operational Constraints & Policy Boundaries**:
+   - Allowed remediation action types strictly restricted to `RESTART_SERVICE`, `SCALE_SERVICE`, `ROLLBACK_SERVICE`.
+   - Parameter validation schemas and deterministic risk classification policies (`LOW`, `MEDIUM`, `HIGH`).
+   - Safety restrictions: Simulated-only execution boundaries; zero direct cluster mutation permitted.
+
+#### Concrete Demo Input Example:
+- **Scenario**: Payment service begins returning HTTP 500 errors during a controlled `http_500_spike` fault-injection experiment (`FAULT-1D8A4DA5`, `error_rate: 1.0`).
+- **Telemetry Fed**: Prometheus records 100% error rate (0/10 OK, 10/10 500s); Loki captures error stack traces; Jaeger isolates 7 failed spans (`EV-TRACE-3F77AC`).
+- **Context Fed**: Incident ID `INC-CD90E2`, active fault change metadata (`EV-CHANGE-9964BD`), pod health (`EV-INFRA-5B1A7A`), and 3 pgvector runbooks (`EVID-KNOW-6750`).
+
+---
+
+## Slide 7: Project Output: What Does SentryOps Produce?
+### Root Cause Diagnosis, Remediation Proposals, Safety Decisions & Verification Outcomes
+
+```text
+  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐
+  │  Diagnosis   │ ──► │  Remediation │ ──► │ 🛡 Human Approval Gate│
+  │  (RCA Proof) │     │   Proposal   │     │ (Mandatory for Med/Hi)│
+  └──────────────┘     └──────────────┘     └──────────┬───────────┘
+    [ APPROVED ] ──► Simulated Exec ──► Verification Checks ──► RESOLVED
+    [ REJECTED ] ──► Action Cancelled (null) ──► Stays in INVESTIGATING
+```
+
+#### Four Output Categories:
+1. **A. Incident Diagnosis & Root Cause Analysis (RCA)**:
+   - Affected service attribution (`payment-service`), root cause classification, and confidence score.
+   - Evidence linkage: Cross-correlated telemetry evidence (`EV-TRACE-3F77AC`, `EV-CHANGE-9964BD`, `EV-INFRA-5B1A7A`).
+   - Anti-Hallucination verification: Validated that all cited evidence IDs exist in ground truth store.
+2. **B. Structured Remediation Proposal**:
+   - Allowlisted action proposal: `SCALE_SERVICE` for target `payment-service`.
+   - Validated parameters: `replicas: 2` (plainly labeled `[DEMO FIXTURE - MOCK_LLM]`).
+   - Deterministic risk assessment: Classified as `MEDIUM` risk flagging mandatory human approval requirement.
+3. **C. Safety Decision & Execution Result**:
+   - Approval audit status: `APPROVED` or `REJECTED` recorded with decision metadata.
+   - Execution status: `SUCCESS` applied strictly against in-memory `SIMULATED_INFRA_STATE`.
+   - Hardened cluster boundary: Zero live Kubernetes mutations (`kubectl get deployment` remains at 1 replica).
+4. **D. Deterministic Verification & Postmortem**:
+   - Automated post-remediation verification checks: `replica_count` (2) and `service_health` (healthy) passed (`VERIFIED_SUCCESS`).
+   - Lifecycle resolution: Incident marked `RESOLVED` (or remains `INVESTIGATING` if rejected).
+   - Structured postmortem: 9-section postmortem generated deterministically; evaluation pass across 4 dimensions.
+
+#### Concrete Demo Output & Recovery Lifecycle:
+- **Diagnosis & Proposal**: RCA diagnosed payment-service failure. Proposed `SCALE_SERVICE` (replicas: 2), rated `MEDIUM` risk (`PENDING_APPROVAL`).
+- **Approval Path (`INC-CD90E2`)**: Operator approved (`POST /approve`) ➔ status `APPROVED` ➔ updated simulated state (`SUCCESS`) ➔ verified healthy ➔ status `RESOLVED`.
+- **Rejection Path (`INC-28EE86`)**: Operator rejected (`POST /reject`) ➔ status `REJECTED` ➔ execution cancelled (`null`) ➔ verification skipped ➔ remains `INVESTIGATING`.
+- **Simulated vs Real Actuation**: Remediation executor updated in-memory simulated state only. Live cluster deployment (`payment-service`) remained strictly at 1 replica.
+- **Actual Live Recovery Truth**: Live HTTP traffic recovered (10/10 OK, 1.051s latency) strictly following explicit fault cleanup (`POST /cleanup`), NOT from simulated scaling.
+
+---
+
+## Slide 8: Observable Telemetry & Operator Dashboard
 ### Real-Time Visibility Across the Stack
 
 1. **Grafana Observability Dashboard**:
@@ -95,7 +171,7 @@
 
 ---
 
-## Slide 7: Live Demonstration Walkthrough
+## Slide 9: Live Demonstration Walkthrough
 ### Validated Scenario: `http_500_spike` on `payment-service`
 
 - **Incident Identifier**: `INC-CD90E2`
@@ -116,7 +192,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 8: Execution, Verification & Postmortem
+## Slide 10: Execution, Verification & Postmortem
 ### Deterministic Lifecycle Completion
 
 - **Approval**: Operator submitted approval via dashboard.
@@ -132,7 +208,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 9: Technical Testing & Metric Disclosure
+## Slide 11: Technical Testing & Metric Disclosure
 ### Evidence-Based Quality Assurance
 
 - **Selected Kubernetes-Compatible Suites**: **152 / 152 PASSED (100%)**
@@ -146,7 +222,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 10: Security Architecture & Operational Boundaries
+## Slide 12: Security Architecture & Operational Boundaries
 ### Built-in Hardened Constraints
 
 1. **No Pod Privilege Escalation**:
@@ -162,7 +238,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 11: Summary & Future Roadmap
+## Slide 13: Summary & Future Roadmap
 ### Key Achievements & Next Steps
 
 - **Achievements**:
