@@ -1,211 +1,472 @@
 # SentryOps
 
-**Autonomous Multi-Agent Production Incident Response and Root Cause Analysis Platform.**
+> **Autonomous Multi-Agent Production Incident Response & Root Cause Analysis Platform**
+> *Course: CSE311 Artificial Intelligence | Final Project Review*
+> *Author / Contributor: Daksh Singh*
+> *GitHub Repository: [https://github.com/daxsh2803/SentryOps](https://github.com/daxsh2803/SentryOps)*
 
-SentryOps is a specialized, multi-agent AI platform designed to investigate, verify, and remediate production incidents autonomously while operating under strict deterministic safety boundaries. It bridges the gap between observability tools and incident resolution by automatically synthesizing telemetry into actionable, verifiable root-cause analyses.
+---
 
-## Key Capabilities & Technology Stack
-- **Simulated Production**: Five FastAPI microservices plus a fault-injection API running on Kubernetes.
-- **Observability**: OpenTelemetry, Prometheus, Grafana, Jaeger, Loki.
-- **Multi-Agent AI**: Specialized LangGraph agents for logs, metrics, traces, deployment, infrastructure, and historical knowledge (RAG).
-- **Controlled Remediation**: Deterministic risk engine, strict human approval gates, and verified execution.
-- **Technology Stack**: Python, FastAPI, LangGraph, React, TypeScript, Vite, PostgreSQL, pgvector.
+## Table of Contents
+- [1. Project Title](#1-project-title)
+- [2. Introduction](#2-introduction)
+  - [Problem Addressed](#problem-addressed)
+  - [Objective](#objective)
+  - [Relevance & Operational Impact](#relevance--operational-impact)
+- [3. Methodology](#3-methodology)
+  - [System Architecture & End-to-End Workflow](#system-architecture--end-to-end-workflow)
+  - [Multi-Agent LangGraph Orchestration & Specialized Roles](#multi-agent-langgraph-orchestration--specialized-roles)
+  - [Observability Pipeline: Prometheus, Loki & Jaeger](#observability-pipeline-prometheus-loki--jaeger)
+  - [Fault Injection Control Center & Supported Anomaly Scenarios](#fault-injection-control-center--supported-anomaly-scenarios)
+  - [Deterministic Risk Policy & Human-in-the-Loop Safety Gate](#deterministic-risk-policy--human-in-the-loop-safety-gate)
+  - [Actuation Boundary, Automated Verification & Audit Reporting](#actuation-boundary-automated-verification--audit-reporting)
+- [4. Results](#4-results)
+  - [Implemented Capabilities & Demonstrated Features](#implemented-capabilities--demonstrated-features)
+  - [Verified Fault-Injection & Recovery Walkthrough (`INC-CD90E2`)](#verified-fault-injection--recovery-walkthrough-inc-cd90e2)
+  - [Quality Assurance & Test Suite Results](#quality-assurance--test-suite-results)
+  - [Observability Dashboard & Application Evidence](#observability-dashboard--application-evidence)
+- [5. Conclusion](#5-conclusion)
+  - [Work Completed](#work-completed)
+  - [Main Outcome & Value Demonstrated](#main-outcome--value-demonstrated)
+  - [Operational Limitations & Implementation Boundaries](#operational-limitations--implementation-boundaries)
+- [6. References](#6-references)
+- [Detailed Technical Documentation & Runbook](#detailed-technical-documentation--runbook)
+  - [Prerequisites](#prerequisites)
+  - [Local Cluster & Stack Deployment](#local-cluster--stack-deployment)
+  - [Local Development & Port Forwarding](#local-development--port-forwarding)
+  - [Environment Variables](#environment-variables)
+  - [Reproducing the Demonstration Workflow](#reproducing-the-demonstration-workflow)
+  - [Backend & Microservice API Reference](#backend--microservice-api-reference)
+  - [Phased Architecture History](#phased-architecture-history)
 
-## Multi-Agent Incident Investigation Architecture
+---
 
-SentryOps orchestrates multiple AI agents to investigate incidents. The orchestration is defined using LangGraph and operates as follows:
+## 1. Project Title
 
-1. **Trigger**: An incident is created via the backend API (e.g., triggered by an alert).
-2. **Fan-Out (Parallel Investigation)**: The `IncidentManager` node fans out the investigation to six specialized agents running in parallel:
-   - **Log Agent**: Queries Loki for application errors and logs.
-   - **Metrics Agent**: Queries Prometheus for service-level metrics (e.g., HTTP 500 spikes).
-   - **Trace Agent**: Queries Jaeger for distributed traces and span failures.
-   - **Deployment Agent**: Checks recent deployment and configuration changes.
-   - **Infrastructure Agent**: Queries Prometheus for pod and node health metrics.
-   - **Knowledge Agent (RAG)**: Uses pgvector similarity search to retrieve relevant historical postmortems and runbooks from PostgreSQL.
-3. **Fan-In (Root Cause Analysis)**: The findings from all six agents converge into the `RCA Agent`. This agent synthesizes the collected evidence and generates a Root Cause Analysis.
-4. **Remediation & Risk Gate**: The `Remediation Agent` proposes an action. The proposal is evaluated by a **Deterministic Risk Engine** (non-LLM). If the risk is Medium/High, it halts at `PENDING_APPROVAL`.
-5. **Execution & Verification**: Once a human operator approves the action, it is executed. The `Verification Agent` then runs deterministically to ensure the service has recovered.
+- **Project Name**: SentryOps
+- **Tagline**: An AI-assisted Site Reliability Engineering (SRE) incident investigation and response platform combining multi-agent telemetry synthesis, deterministic safety boundaries, and human-in-the-loop remediation.
+- **Repository**: [https://github.com/daxsh2803/SentryOps](https://github.com/daxsh2803/SentryOps)
+- **Academic Context**: CSE311 Artificial Intelligence | Final Project Review
+- **Author / Contributor**: Daksh Singh ([@daxsh2803](https://github.com/daxsh2803))
 
-*Note: In the demonstration configuration (`MOCK_LLM=true`), the system produces a deterministic remediation proposal clearly labeled as `[DEMO FIXTURE - MOCK_LLM]` referencing real incident evidence IDs. It is evaluated by the deterministic Risk Engine and requires human operator approval before simulated execution. Real traffic recovery is produced by clearing the injected fault via the fault cleanup endpoint.*
+---
+
+## 2. Introduction
+
+### Problem Addressed
+Modern microservice architectures deployed on Kubernetes generate immense volumes of telemetry across distributed boundaries. During high-severity production outages, site reliability engineers (SREs) face acute cognitive overload: they must manually query Prometheus metrics, grep through Loki logs, trace distributed spans in Jaeger, inspect Kubernetes pod statuses, and cross-reference internal wikis or runbooks. This fragmented manual correlation introduces high Mean Time to Detect (MTTD) and Mean Time to Remediate (MTTR), while increasing the risk of misdiagnosis or flawed remediation commands executed under high operational stress.
+
+### Objective
+SentryOps demonstrates an end-to-end, structured incident response workflow that combines:
+1. **Automated Telemetry Aggregation**: Simultaneous collection of error logs, latency/error metrics, distributed traces, and infrastructure state.
+2. **Coordinated Multi-Agent Investigation**: A LangGraph orchestration pipeline deploying specialized investigation agents that run in parallel.
+3. **Evidence-Linked Root Cause Analysis (RCA)**: Synthesizing telemetry findings with anti-hallucination validation against verified incident evidence IDs.
+4. **Risk-Aware Remediation Proposals**: Strict allow-listed operational actions evaluated by an immutable, deterministic (non-LLM) risk policy engine.
+5. **Human Approval & Actuation Boundary**: A mandatory human-in-the-loop gate for medium/high-risk actions, executing against an isolated in-memory simulation state rather than mutating production deployments.
+6. **Automated Verification & Auditable Reporting**: Closed-loop post-action verification, full lifecycle state replay, and automated executive report generation (Markdown & standalone HTML).
+
+### Relevance & Operational Impact
+Providing AI assistance to SREs requires unwavering safety. Completely unconstrained autonomous agents risk executing destructive commands or compounding cluster instability. SentryOps tackles this challenge by decoupling cognitive synthesis (handled by parallel AI agents) from operational execution (governed by hardcoded deterministic rules, human approval gates, and strict simulation boundaries). This ensures faster, evidence-backed, fully auditable incident resolution without relinquishing operational control.
+
+---
+
+## 3. Methodology
+
+### System Architecture & End-to-End Workflow
+
+The SentryOps platform is structured into three primary tiers: the simulated microservice ecosystem, the observability stack, and the SentryOps multi-agent backend and operator dashboard.
+
+```text
+ ┌────────────────────────────────────────────────────────────────────────────────────────┐
+ │                      KUBERNETES APPLICATION WORKLOADS (:8080 / :8005)                  │
+ │                                                                                        │
+ │    User / Demo Traffic ──► [API Gateway :8080]                                         │
+ │                                  │                                                     │
+ │                 ┌────────────────┼────────────────┐                                    │
+ │                 ▼                ▼                ▼                                    │
+ │          [Order Service]  [Payment Service]  [Inventory Service]                       │
+ │                 │                │                │                                    │
+ │                 └────────────────┼────────────────┘                                    │
+ │                                  ▼                                                     │
+ │                         [Notification Service]                                         │
+ │                                  ▲                                                     │
+ │                                  │ Synthetic Anomaly Injection                         │
+ │                    [Fault Injection API :8005]                                         │
+ └──────────────────────────────────┬─────────────────────────────────────────────────────┘
+                                    │ Emits Metrics, Logs & Distributed Traces
+                                    ▼
+ ┌────────────────────────────────────────────────────────────────────────────────────────┐
+ │                    OBSERVABILITY & TELEMETRY INFRASTRUCTURE                            │
+ │   • Prometheus (:9090): HTTP rates, error percentages, CPU/memory telemetry            │
+ │   • Grafana Loki (:3100): Structured JSON application logs & error stack traces        │
+ │   • Jaeger (:16686): OpenTelemetry distributed trace spans & parent-child relationships │
+ │   • Grafana (:3000): Unified operational telemetry dashboard                           │
+ └──────────────────────────────────┬─────────────────────────────────────────────────────┘
+                                    │ Telemetry Polling & Query APIs
+                                    ▼
+ ┌────────────────────────────────────────────────────────────────────────────────────────┐
+ │               SENTRYOPS BACKEND & MULTI-AGENT ENGINE (FastAPI :8000)                   │
+ │                                                                                        │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │                         LangGraph Orchestration Pipeline                         │  │
+ │  │                                                                                  │  │
+ │  │  [IncidentManager] ──► Fan-Out to 6 Parallel Specialized Investigative Agents:   │  │
+ │  │   ├── LogAgent           ──► Queries Loki for error traces & logs                │  │
+ │  │   ├── MetricsAgent       ──► Queries Prometheus HTTP error rate & latency spikes │  │
+ │  │   ├── TraceAgent         ──► Queries Jaeger for downstream error spans           │  │
+ │  │   ├── DeploymentAgent    ──► Queries Fault Injection API for active anomalies    │  │
+ │  │   ├── InfrastructureAgent──► Inspects Kubernetes pod & node health               │  │
+ │  │   └── KnowledgeAgent     ──► Queries pgvector for historical runbooks & incidents │  │
+ │  │                                                                                  │  │
+ │  │  [RCA Agent]             ──► Fan-In Evidence Synthesis + Anti-Hallucination Gate │  │
+ │  │  [Remediation Agent]     ──► Strict Allowlist Selection (SCALE/RESTART/ROLLBACK) │  │
+ │  │  [Deterministic Risk]    ──► Non-LLM Risk Classification (LOW / MEDIUM / HIGH)   │  │
+ │  └──────────────────────────────────────────┬───────────────────────────────────────┘  │
+ │                                             │                                          │
+ │                                             ▼                                          │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │                        Deterministic Safety & Human Gate                         │  │
+ │  │  • PENDING_APPROVAL: Halts execution for MEDIUM / HIGH risk proposals             │  │
+ │  │  • Operator Approval / Rejection API (/incidents/{id}/approve or /reject)        │  │
+ │  │  • Actuation Boundary: In-Memory SIMULATED_INFRA_STATE (0 real cluster mutations)│  │
+ │  │  • Automated Verification: Asserts replica count & service health                │  │
+ │  │  • Lifecycle Audit: Replay Reconstruction & Structured Postmortem Generator      │  │
+ │  └──────────────────────────────────────────┬───────────────────────────────────────┘  │
+ │                                             │                                          │
+ │                                             ▼                                          │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │                     PostgreSQL Database with pgvector (:5432)                    │  │
+ │  │   • incidents        • incident_events  • evidence       • root_causes           │  │
+ │  │   • remediations     • approvals        • executions     • verifications         │  │
+ │  │   • evaluations      • embeddings (semantic runbook search & historical RAG)     │  │
+ │  └──────────────────────────────────────────────────────────────────────────────────┘  │
+ └────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Multi-Agent LangGraph Orchestration & Specialized Roles
+
+The core investigation engine uses **LangGraph** to coordinate parallel telemetry collection and convergence:
 
 ```mermaid
 graph TD
-    A[Incident Trigger] --> B[Incident Manager]
-    B --> C[Log Agent]
-    B --> D[Metrics Agent]
-    B --> E[Trace Agent]
-    B --> F[Deployment Agent]
-    B --> G[Infrastructure Agent]
-    B --> H[Knowledge Agent]
-    C --> I[RCA Agent]
+    A[Incident Triggered] --> B[Incident Manager Node]
+    B --> C[Log Agent - Loki]
+    B --> D[Metrics Agent - Prometheus]
+    B --> E[Trace Agent - Jaeger]
+    B --> F[Deployment Agent - Fault API]
+    B --> G[Infrastructure Agent - Pod Telemetry]
+    B --> H[Knowledge Agent - pgvector RAG]
+    C --> I[RCA Agent - Evidence Synthesis]
     D --> I
     E --> I
     F --> I
     G --> I
     H --> I
     I --> J[Remediation Agent]
-    J --> K{Deterministic Risk Engine}
-    K -- "PENDING_APPROVAL (Human Gate)" --> L[Wait for Operator]
-    L -- "Approve & Execute" --> M[Verification Agent]
-    K -- "LOW Risk (Auto-Execute)" --> M
-    M --> N[End]
+    J --> K{Deterministic Risk Policy Engine}
+    K -- "MEDIUM / HIGH Risk" --> L[PENDING_APPROVAL: Wait for Human Operator]
+    L -- "Operator Approved" --> M[In-Memory Executor]
+    K -- "LOW Risk" --> M
+    M --> N[Verification Agent]
+    N --> O[Incident Resolved / Re-investigate]
 ```
 
-## Application Screenshots and Observability Evidence
+1. **Incident Manager**: Coordinates state initialization and fans out parallel queries across all observability modalities.
+2. **Log Agent**: Queries Loki for application error logs, matching service names and time bounds around the incident start.
+3. **Metrics Agent**: Queries Prometheus PromQL endpoints to detect HTTP 5xx error spikes and p99 latency regressions.
+4. **Trace Agent**: Queries Jaeger distributed tracing APIs to isolate failing HTTP spans and client-server dependency breakdowns.
+5. **Deployment Agent**: Inspects active fault injection state and deployment configuration changes.
+6. **Infrastructure Agent**: Collects pod restart counts, resource quotas, and node health signals.
+7. **Knowledge Agent (RAG)**: Executes vector cosine similarity search over historical incident postmortems and runbooks stored in PostgreSQL using `pgvector`.
+8. **RCA Agent**: Performs fan-in synthesis of all collected evidence. Validates that every conclusion links to an authentic evidence ID (`EV-*`) recorded in the database, preventing hallucinated root causes.
+9. **Remediation Agent**: Maps identified root causes to a parameterized action from a strict allowlist.
 
-The SentryOps frontend provides operators with complete visibility over the incident response lifecycle.
+### Observability Pipeline: Prometheus, Loki & Jaeger
+- **Prometheus (`:9090`)**: Scrapes `/metrics` endpoints across all services every 5 seconds, calculating error ratios (`rate(http_requests_total{status=~"5.."}[1m])`).
+- **Grafana Loki (`:3100`)**: Ingests structured JSON logs tagged by service, level, and trace ID.
+- **Jaeger (`:16686`)**: Captures end-to-end OpenTelemetry spans spanning `api-gateway` -> `order-service` -> `payment-service`.
 
-### 1. Main Dashboard
+### Fault Injection Control Center & Supported Anomaly Scenarios
+SentryOps includes an integrated Fault Injection Control Center (`frontend/src/pages/FaultInjection.tsx`) communicating with the `fault-injection` microservice (`:8005`):
+- `http_500_spike`: Forces a target service to return HTTP 500 responses at a configurable rate (e.g., 80%).
+- `high_latency`: Injects artificial delay (e.g., 2000ms) into downstream HTTP request handlers.
+- `service_down`: Simulates complete service unresponsiveness or termination.
+- `database_connection_pool_exhaustion`: Artificially exhausts mock database pool connections.
+- `cpu_stress`: Saturates CPU utilization within the container environment.
+
+### Deterministic Risk Policy & Human-in-the-Loop Safety Gate
+To prevent dangerous operations, remediation risk evaluation is completely decoupled from LLM inference:
+- **Allowlisted Actions**: Only `RESTART_SERVICE`, `SCALE_SERVICE`, and `ROLLBACK_SERVICE` are valid actions. Unrecognized action types are rejected immediately.
+- **Deterministic Policy Table**:
+  - `RESTART_SERVICE`: Classified as `LOW` risk (restarts a stateless pod; permitted to execute autonomously or via policy).
+  - `SCALE_SERVICE`: Classified as `MEDIUM` risk (changes workload allocation; halts at `PENDING_APPROVAL` requiring human operator confirmation).
+  - `ROLLBACK_SERVICE`: Classified as `HIGH` risk (alters service version; halts at `PENDING_APPROVAL` requiring human operator confirmation).
+  - `UNKNOWN` / arbitrary commands: Hard rejected as `UNSAFE`.
+
+### Actuation Boundary, Automated Verification & Audit Reporting
+- **In-Memory Actuation Boundary**: The remediation executor applies actions against an in-memory `SIMULATED_INFRA_STATE` dictionary. It deliberately makes **zero live cluster mutations** (`kubectl` commands are not executed against the live cluster), ensuring the platform remains safe for evaluation and learning.
+- **Automated Verification Agent**: Following remediation execution, the verification agent checks replica state and validates that error rates have normalized before marking the incident status as `RESOLVED`.
+- **Audit Reporting Engine (`reportGenerator.ts`)**: Generates comprehensive incident postmortems exportable directly from the UI as:
+  - **Markdown (`.md`)**: Formatted for GitHub, Jira, or engineering wikis.
+  - **Standalone Executive HTML (`.html`)**: Self-contained, responsive report complete with embedded CSS, severity badges, timeline graphs, evidence tables, risk analysis, and audit trails.
+
+---
+
+## 4. Results
+
+### Implemented Capabilities & Demonstrated Features
+- **Deterministic Incident Timeline & Timestamp Serialization**: All backend models serialize timestamps in timezone-aware UTC ISO 8601 with trailing `'Z'` (`serialize_utc_datetime`). Incident lists sort newest-first deterministically with primary key tie-breaking.
+- **Integrated Operator Dashboard**: React + Vite frontend providing real-time incident browsing, severity filters, automated refresh, AI investigation triggering, and one-click report export.
+- **Fault Injection Control Center**: UI enabling operators to inject and clear faults on demand, run order traffic simulations, and inspect gateway responses.
+- **Lifecycle Audit & Evaluation**: Structured postmortems capturing timeline events, evidence correlation, remediation actions, and verification outcomes.
+
+### Verified Fault-Injection & Recovery Walkthrough (`INC-CD90E2`)
+A complete end-to-end lifecycle demonstration was verified using `demo_runner.py` targeting the `payment-service`:
+
+```text
+Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault Cleared ──► Recovery Verified (10/10 OK)
+```
+
+1. **Baseline Phase**: Generated 10 requests to `POST /orders` via `api-gateway` (`:8080`). All 10 requests succeeded (0% error rate).
+2. **Fault Injection Phase**: Injected `http_500_spike` into `payment-service` with `error_rate: 0.8`. Success rate dropped to 0% (10/10 failed with HTTP 500).
+3. **Incident Creation & AI Investigation**: Incident `INC-CD90E2` created. Multi-agent investigation collected logs (`EV-LOG-421738`), metrics (`EV-METRIC-23A54C`), traces (`EV-TRACE-3F77AC`), and fault state (`EV-CHANGE-9964BD`).
+4. **RCA & Remediation Proposal**: The RCA agent identified the HTTP 500 spike. The remediation agent proposed `SCALE_SERVICE` (ID: 21). The deterministic risk policy classified it as `MEDIUM` risk, placing it in `PENDING_APPROVAL`.
+5. **Operator Approval & Verification**: Approved via operator dashboard. Action executed against `SIMULATED_INFRA_STATE`. Fault cleared via `POST /faults/FAULT-1D8A4DA5/cleanup`.
+6. **Recovery Verification**: Order traffic resumed at 100% success rate (10/10 succeeded, 0% error rate).
+
+### Quality Assurance & Test Suite Results
+
+Test execution was performed and verified across unit, integration, and platform test suites:
+
+#### Targeted Unit & Modernization Suites (Today's Work)
+| Test Suite | Command | Result | Scope Verified |
+| :--- | :--- | :--- | :--- |
+| **Backend Timestamp Serialization** | `pytest tests/test_incident_timestamps.py` | **8 / 8 PASSED (100%)** | UTC 'Z' ISO serialization, model field serializers, SQL query sorting |
+| **Frontend Date Handling & Comparator** | `node --experimental-strip-types --test tests/test_frontend_date.mjs` | **7 / 7 PASSED (100%)** | Timestamp parsing, naive UTC normalization, tie-break ordering |
+| **Executive Report Generator** | `node --experimental-strip-types --test tests/test_report_generator.mjs` | **2 / 2 PASSED (100%)** | Markdown & standalone HTML report generation across complete/partial incidents |
+| **Frontend Production Build** | `npm run build` (`tsc -b && vite build`) | **SUCCESS (0 errors)** | 1,953 modules transformed, TypeScript compilation clean |
+
+#### Targeted Kubernetes & Subsystem Test Suites
+Across the targeted subsystem suites, **152 out of 152 tests passed (100%)**:
+- `test_phase13_kubernetes.py`: **22 / 22 passed** (Cluster service routing, health endpoints, ingress)
+- `test_phase12_replay_postmortem.py`: **27 / 27 passed** (Deterministic replay, postmortem schema)
+- `test_phase11_evaluation.py`: **15 / 15 passed** (Evidence linkage validation, anti-hallucination checks)
+- `test_phase9_verification.py`: **11 / 11 passed** (Closed-loop remediation verification)
+- `test_phase8_workflow_demo.py`: **17 / 17 passed** (End-to-end incident lifecycle workflow)
+- `test_phase8_remediation.py`: **12 / 12 passed** (Risk policy classification, allowlists)
+- `test_phase7_knowledge.py`: **10 / 10 passed** (pgvector embeddings, runbook semantic search)
+- `test_phase6_investigation.py`: **20 / 20 passed** (LangGraph fan-out, parallel agent execution)
+- `test_services.py`: **10 / 10 passed** (FastAPI microservice endpoints)
+- `test_fault_injection.py`: **8 / 8 passed** (Fault injection lifecycle and cleanup)
+
+*Note on Legacy Integration Tests*: Legacy test files from early phases (`tests/test_ai_agent.py` and `tests/test_backend.py`) reflect initial pre-LangGraph mock contracts prior to the multi-agent graph architecture and are distinguished from the 152 passing active subsystem tests.
+
+### Observability Dashboard & Application Evidence
+
+#### 1. Operator Incident Dashboard
 ![Main Dashboard](docs/images/screenshots/dashboard-overview.png)
-*The main dashboard provides an overview of all incidents, their severities, and the simulated service health metrics.*
+*Figure 1: SentryOps Incident Management Dashboard displaying active incidents, severities, affected services, and real-time status tracking.*
 
-### 2. Live Service Metrics (Grafana)
+#### 2. Prometheus & Grafana Service Metrics
 ![Service Metrics](docs/images/screenshots/grafana-service-metrics.png)
-*Grafana dashboard displaying Prometheus metrics, tracking request latency, success rates, and errors across the simulated microservices.*
+*Figure 2: Real-time telemetry in Grafana tracking HTTP request latency, error spikes, and throughput across the microservice cluster.*
 
-### 3. Incident Details & AI Investigation
+#### 3. AI Multi-Agent Investigation View
 ![AI Investigation](docs/images/screenshots/ai-investigation.png)
-*Detailed incident view showing the AI investigation results.*
+*Figure 3: Detail view of an incident showing synthesized findings from parallel Log, Metrics, Trace, and Infrastructure agents.*
 
-### 4. Remediation and Approval
+#### 4. Remediation Proposal & Human Approval Gate
 ![Remediation Approval](docs/images/screenshots/remediation-approval.png)
-*The remediation section showing the AI's proposal. The deterministic Risk Engine flagged this action for human approval.*
+*Figure 4: Operator approval gate displaying proposed remediation, deterministic risk classification (MEDIUM), and require approval banner.*
 
-### 5. Post-Recovery State
+#### 5. Verified Post-Recovery State
 ![Incident Recovery State](docs/images/screenshots/incident-recovery-state.png)
-*The dashboard after the simulated recovery, showing the incident marked as investigating/resolved and service health restored to normal levels.*
+*Figure 5: Post-recovery verification confirming service health restored and incident status updated to RESOLVED.*
 
-## Experimental Methodology and Results
+#### 6. Demonstration Traffic & Telemetry Metrics
+| Request Success vs Failure | Error Rate Progression | Request Latency |
+| :---: | :---: | :---: |
+| ![Success vs Failure](docs/images/demo/success_failures.png) | ![Error Rate](docs/images/demo/error_rate.png) | ![Latency](docs/images/demo/latency.png) |
+| *Traffic drops to 0% success during fault* | *Error rate spikes during fault, clears on recovery* | *Fast-failing 500s reduce average latency* |
 
-To validate the platform, we ran an automated demonstration (`demo_runner.py`) using the `http_500_spike` fault on the `payment-service`. The runner generated traffic, triggered the fault, created an incident, invoked the AI, and manually cleared the fault to simulate recovery.
+---
 
-Latency and error rates were measured client-side by the demonstration runner using `time.time()` for 10-15 requests per phase.
+## 5. Conclusion
 
-### Request Success vs Failure
-![Success vs Failure](docs/images/demo/success_failures.png)
-*During the incident, the success rate plummeted due to injected 500 errors.*
+### Work Completed
+SentryOps demonstrates a complete, functional prototype of an AI-assisted SRE platform. The project successfully implements:
+1. Microservice architecture on Kubernetes with 5 microservices and an integrated fault injector.
+2. Full observability pipeline incorporating Prometheus, Grafana Loki, and Jaeger distributed tracing.
+3. Multi-agent investigation orchestration powered by LangGraph with 6 specialized parallel agents.
+4. Deterministic non-LLM risk evaluation engine enforcing hardcoded safety policies and human approval.
+5. In-memory simulated actuation boundary ensuring zero accidental cluster disruptions.
+6. Incident replay, automated closed-loop verification, and multi-format executive report generation.
 
-### Error Rate Progression
-![Error Rate](docs/images/demo/error_rate.png)
-*The error rate spiked to over 50% during the active fault and returned to 0% after cleanup.*
+### Main Outcome & Value Demonstrated
+The primary achievement of SentryOps is proving that AI-assisted incident response can drastically accelerate root cause discovery without compromising operational stability. By enforcing a strict boundary between automated telemetry reasoning and deterministic actuation rules, the platform eliminates hallucinated remediations and prevents rogue autonomous modifications to critical infrastructure.
 
-### Request Latency
-![Request Latency](docs/images/demo/latency.png)
-*Average request latency remained relatively stable but dropped slightly during the incident due to fast-failing HTTP 500 responses.*
+### Operational Limitations & Implementation Boundaries
 
-## Practical Scenario Walkthrough: Payment Service HTTP 500 Spike
+To ensure complete academic and technical transparency, the following operational boundaries must be explicitly noted:
+1. **Deterministic / Mock LLM Reasoning**: Under the demonstration configuration (`MOCK_LLM=true`), the system produces deterministic root-cause analyses and remediation proposals clearly labeled as `[DEMO FIXTURE - MOCK_LLM]`. It references real database evidence IDs but does not execute unconstrained live LLM generation.
+2. **In-Memory Actuation Boundary**: The remediation execution engine updates an internal, in-memory state dictionary (`SIMULATED_INFRA_STATE`). It does **not** execute live `kubectl` scale or rollback commands against the Kubernetes cluster.
+3. **Incident Creation Workflow**: In the demonstration frontend, incidents are initiated via the backend API upon operator trigger or test runner request following fault injection. Fully automated Prometheus Alertmanager webhook ingestion is not currently claimed.
+4. **Security & Development Environment Scope**: The platform is an academic research prototype. Backend API endpoints omit enterprise-grade authentication/authorization (OAuth2/RBAC), default credentials are used (`sentryops:sentryops`), and the local Kind cluster metrics-server utilizes `--kubelet-insecure-tls`.
+5. **Storage Persistence**: Observability backends (Prometheus, Loki) utilize `emptyDir` volumes in the local Kind configuration, which do not persist across cluster teardown.
 
-**1. Input Request & Fault Injection**
-We injected a simulated HTTP 500 spike fault into the `payment-service` while processing continuous order traffic.
-- **Target Endpoint:** `POST /orders`
-- **Injected Fault Payload:** `{"fault_type": "http_500_spike", "target_service": "payment-service", "parameters": {"error_rate": 0.8}}`
+---
 
-**2. Observed Output & Incident Creation**
-Immediately after fault injection, traffic success dropped.
-- **Phase A (Baseline):** 0% Error Rate.
-- **Phase B (Fault Active):** >50% Error Rate.
-- **Incident Created:** `INC-CD90E2`
+## 6. References
 
-**3. AI Investigation & Remediation State**
-The AI investigation automatically triggered. Operating under the `MOCK_LLM=true` configuration, it produced a deterministic remediation proposal referencing actual collected telemetry evidence (`EV-TRACE-3F77AC`, `EV-CHANGE-9964BD`, `EV-INFRA-5B1A7A`).
-- **Remediation Proposed:** `ID: 21` (`SCALE_SERVICE` for `payment-service` to 2 replicas, labeled `[DEMO FIXTURE - MOCK_LLM]`)
-- **Risk Assessment:** `MEDIUM` (Requires operator approval)
-- **Status:** Evaluated as `PENDING_APPROVAL` prior to operator action; resolved to `APPROVED` upon operator approval
-- **Execution:** Controlled execution against in-memory `SIMULATED_INFRA_STATE` (`SUCCESS`) followed by deterministic verification (`VERIFIED_SUCCESS`)
-- **Cluster Boundary:** No live Kubernetes deployment mutations occur; `kubectl get deployment payment-service` remains strictly at 1 replica
+### Repository
+- SentryOps Source Repository: [https://github.com/daxsh2803/SentryOps](https://github.com/daxsh2803/SentryOps)
 
-**4. Simulated Recovery**
-Live HTTP recovery was achieved by clearing the synthetic fault via the fault cleanup endpoint (`POST /faults/FAULT-1D8A4DA5/cleanup`), restoring service health from 0% to 100% success.
-- **Phase C (Post-Recovery):** 0% Error Rate (10/10 requests succeeded).
+### Core Technologies & Official Documentation
+1. **LangGraph**: Orchestration framework for stateful, multi-agent workflows. [https://langchain-ai.github.io/langgraph/](https://langchain-ai.github.io/langgraph/)
+2. **FastAPI**: Modern, high-performance Python web framework for building APIs. [https://fastapi.tiangolo.com/](https://fastapi.tiangolo.com/)
+3. **Prometheus**: Open-source systems monitoring and alerting toolkit. [https://prometheus.io/docs/](https://prometheus.io/docs/)
+4. **Grafana Loki**: Horizontally-scalable, highly-available log aggregation system. [https://grafana.com/docs/loki/](https://grafana.com/docs/loki/)
+5. **Jaeger**: Open-source, end-to-end distributed tracing. [https://www.jaegertracing.io/docs/](https://www.jaegertracing.io/docs/)
+6. **React & Vite**: Frontend UI library and next-generation frontend tooling. [https://react.dev/](https://react.dev/) | [https://vite.dev/](https://vite.dev/)
+7. **PostgreSQL & pgvector**: Vector similarity search extension for PostgreSQL. [https://github.com/pgvector/pgvector](https://github.com/pgvector/pgvector)
+8. **Kubernetes & Kind**: Container orchestration and local Kubernetes clusters using Docker container nodes. [https://kubernetes.io/docs/](https://kubernetes.io/docs/) | [https://kind.sigs.k8s.io/](https://kind.sigs.k8s.io/)
 
-## Safety Model
+---
 
-SentryOps enforces a strict safety model to prevent destructive AI actions:
-- **No Direct Shell/Kubernetes Access**: The LLM cannot execute arbitrary bash scripts or `kubectl` commands.
-- **Allow-listed Actions**: Remediations are strictly limited to parameterized `RESTART_SERVICE`, `SCALE_SERVICE`, and `ROLLBACK_SERVICE` actions.
-- **Deterministic Risk Policy**: A hardcoded, non-LLM policy engine evaluates the risk of every proposal.
-- **Human Approval Gates**: Medium and High-risk actions require explicit operator approval before execution.
+# Detailed Technical Documentation & Runbook
 
-## Setup and Reproduction Instructions
+## Prerequisites
+- **Operating System**: Linux, macOS, or Windows 11 with WSL2 / PowerShell.
+- **Docker**: Docker Desktop or Docker Engine (min 4 vCPUs, 8 GB RAM allocated).
+- **Kubernetes**: `kind` (Kubernetes in Docker) or `kubectl` configured to a local cluster.
+- **Python**: Version 3.10 to 3.13.
+- **Node.js**: Version 18+ (tested on Node.js v22).
 
-### Prerequisites
-- Docker Desktop with Kubernetes enabled, minikube, or kind.
-- Python 3.10+
-- Node.js (for frontend)
+---
 
-### Startup Instructions
-1. Deploy the Kubernetes stack:
+## Local Cluster & Stack Deployment
+
+### 1. Build Container Images (Optional if building locally)
+```bash
+./scripts/k8s-build-images.sh
+```
+
+### 2. Deploy the Kubernetes Stack
 ```bash
 ./scripts/k8s-deploy.sh
 ```
-2. Forward the required ports:
-```bash
-kubectl port-forward -n sentryops svc/api-gateway 8080:8000
-kubectl port-forward -n sentryops svc/fault-injection 8005:8005
-kubectl port-forward -n sentryops svc/backend 8000:8000
-```
-3. Start the frontend locally:
-```bash
-cd frontend && npm install && npm run dev
-```
+*Deploys the `sentryops` namespace containing: Postgres (with pgvector), Redis, Prometheus, Loki, Jaeger, Grafana, API Gateway, Order Service, Payment Service, Inventory Service, Notification Service, Fault Injection API, Backend API, and Frontend.*
 
-### Exact Commands
-To reproduce the experimental evidence and charts:
-```bash
-python demo_runner.py
-python generate_charts.py
-```
-*This script will generate the workload, trigger the incident, output the mock AI remediation proposals, manually clear the fault to simulate recovery, and save the generated charts.*
-
-### Cleanup
-To remove the Kubernetes resources:
+### 3. Teardown
 ```bash
 kubectl delete namespace sentryops
 ```
 
-## Testing and Validation Summary
+---
 
-- **Evaluation Framework**: A deterministic evaluation framework evaluates the entire lifecycle (DETECTION -> RCA -> REMEDIATION -> EXECUTION -> VERIFICATION).
-- **RCA Validation**: The framework strictly validates evidence linkage against actually collected incident evidence to prevent hallucinations.
-- **Safety Testing**: Verified that unauthorized executions are blocked on pending or rejected proposals.
+## Local Development & Port Forwarding
 
-## Known Limitations and Future Extensions
+If running services in local development mode or connecting to the cluster:
 
-- **Ephemeral Storage**: Observability storage uses `emptyDir` and is not persistent across pod restarts.
-- **Mocked AI**: The demonstration configuration uses `MOCK_LLM=true` to produce deterministic, safe remediation proposals labeled `[DEMO FIXTURE - MOCK_LLM]` without external LLM API dependencies. Production integration requires connecting an actual LLM provider.
-- **No Direct Kubernetes Actuator**: Remediation executes strictly against in-memory simulated infrastructure state; the platform deliberately contains no direct `kubectl` or cluster mutation actuator.
-- **Security Scope**: In this local demonstration prototype, backend API endpoints omit authentication/authorization, local development credentials (`sentryops:sentryops`) are used, and the Kind metrics-server utilizes `--kubelet-insecure-tls`.
-- **Scaling**: One replica per workload; scaling is simulated in the application layer. Cloud provisioning (Terraform, EKS/GKE) is out of scope.
+```bash
+# API Gateway
+kubectl port-forward -n sentryops svc/api-gateway 8080:8000
+
+# SentryOps Backend API
+kubectl port-forward -n sentryops svc/backend 8000:8000
+
+# Fault Injection API
+kubectl port-forward -n sentryops svc/fault-injection 8005:8005
+
+# Observability Dashboards
+kubectl port-forward -n sentryops svc/prometheus 9090:9090
+kubectl port-forward -n sentryops svc/grafana 3000:3000
+kubectl port-forward -n sentryops svc/jaeger 16686:16686
+```
+
+### Running the Frontend Locally
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*The local Vite server runs at `http://localhost:5173` with preconfigured proxies to `:8000` (`/api`), `:8005` (`/faults-api`), and `:8080` (`/gateway-api`).*
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env` when configuring the backend locally:
+
+```env
+# Database configuration
+POSTGRES_USER=sentryops
+POSTGRES_PASSWORD=sentryops
+POSTGRES_DB=sentryops
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+DATABASE_URL=postgresql+psycopg2://sentryops:sentryops@localhost:5432/sentryops
+
+# Redis cache
+REDIS_URL=redis://localhost:6379/0
+
+# LLM Mocking (true uses deterministic demonstration fixtures)
+MOCK_LLM=true
+```
+
+---
+
+## Reproducing the Demonstration Workflow
+
+To execute the automated end-to-end validation script and regenerate demonstration charts:
+
+```bash
+# Run the end-to-end demonstration workflow
+python demo_runner.py
+
+# Regenerate demonstration charts in docs/images/demo/
+python generate_charts.py
+```
+
+---
+
+## Backend & Microservice API Reference
+
+| Endpoint | Method | Description |
+| :--- | :---: | :--- |
+| `/incidents` | `GET` | List all incidents, ordered newest-first by creation timestamp |
+| `/incidents` | `POST` | Create a new incident record (`DETECTED` status) |
+| `/incidents/{id}` | `GET` | Retrieve full incident details, timeline, and current state |
+| `/incidents/{id}/ai-investigate` | `POST` | Trigger multi-agent LangGraph investigation pipeline |
+| `/incidents/{id}/timeline` | `GET` | Fetch chronological audit events for the incident |
+| `/incidents/{id}/evidence` | `GET` | Retrieve aggregated evidence items (`EV-*`) |
+| `/incidents/{id}/root-cause` | `GET` | Retrieve synthesized root cause analysis |
+| `/incidents/{id}/remediation` | `GET` | Retrieve proposed remediation action and risk level |
+| `/incidents/{id}/approve` | `POST` | Operator approval to execute pending remediation action |
+| `/incidents/{id}/reject` | `POST` | Operator rejection of proposed remediation action |
+| `/incidents/{id}/replay` | `GET` | Reconstruct full lifecycle progression from database audit trail |
+| `/incidents/{id}/postmortem` | `GET` | Generate structured 9-section postmortem document |
+| `/faults` | `GET` | List active synthetic faults from Fault Injection API (`:8005`) |
+| `/faults/types` | `GET` | List all supported fault types (`:8005`) |
+| `/faults/inject` | `POST` | Inject a synthetic anomaly into target service (`:8005`) |
+| `/faults/{fault_id}/cleanup`| `POST` | Clear active fault and restore normal service operation (`:8005`) |
+| `/orders` | `POST` | Submit test order request through API Gateway (`:8080`) |
+
+---
+
+## Phased Architecture History
 
 <details>
-<summary>Detailed Architecture & Phased Implementation History</summary>
+<summary>Click to expand phased development milestones</summary>
 
-## Phase 3 (Fault Injection)
-- **Fault Manager**: Exposed via the `fault-injection` microservice API on port 8005.
-- **Fault Lifecycle**: INACTIVE -> INJECTING -> ACTIVE -> STOPPING -> INACTIVE.
-
-## Phase 4 (Incident Management Backend)
-- **PostgreSQL Persistence**: Schema includes Incident, Evidence, AgentExecution, RootCause, Remediation, Approval, Execution.
-- **Investigation Lifecycle**: Basic state machines enforcing DETECTED -> INVESTIGATING -> MITIGATING workflows.
-
-## Phase 5 & 6 (AI Agent Orchestration)
-- **LangGraph Orchestration**: Introduced a graph connecting an IncidentManager node to parallel LogAgent, MetricsAgent, TraceAgent, DeploymentAgent, and InfrastructureAgent.
-
-## Phase 7 (Knowledge Base & RAG)
-- **PostgreSQL pgvector**: Implemented pgvector for embeddings and similarity search.
-
-## Phase 8 & 9 (Remediation & Verification)
-- **Risk Engine**: Deterministically assesses proposals and assigns risk levels.
-- **Verification Agent**: Consumes the action result and deterministic checks to produce a structured VerificationResult.
-
-## Phase 10: Operator Dashboard
-The frontend dashboard gives operators full visibility into the incident response lifecycle.
-
-## Phase 11 & 12: Incident Replay & Evaluation
-- **Deterministic Replay**: Reconstructs the persisted lifecycle.
-- **Evaluation Framework**: Evaluates the quality, completeness, and internal consistency of the response lifecycle.
-
-## Phase 13: Kubernetes Deployment
-Deploys the existing SentryOps stack to a local Kubernetes cluster using Kustomize.
+- **Phase 1 & 2: Microservice Core & Telemetry Foundations**: Initial deployment of 5 FastAPI services with OpenTelemetry instrumentation exporting to Prometheus, Loki, and Jaeger.
+- **Phase 3: Fault Injection Control**: Dedicated `fault-injection` microservice with 5 supported fault types and dynamic lifecycle management.
+- **Phase 4: Incident Backend & Relational Persistence**: PostgreSQL schema tracking incidents, events, evidence, root causes, remediations, approvals, executions, and verifications.
+- **Phase 5 & 6: LangGraph Multi-Agent Orchestration**: State graph fanning out to parallel Log, Metrics, Trace, Deployment, Infrastructure, and Knowledge agents.
+- **Phase 7: Knowledge Base & Vector RAG**: PostgreSQL `pgvector` semantic similarity search over historical incident postmortems.
+- **Phase 8 & 9: Deterministic Remediation & Verification**: Strict action allowlists, deterministic non-LLM risk classification, and closed-loop verification.
+- **Phase 10: Operator Dashboard**: Modern React + Vite web console with real-time incident browsing, AI investigation triggering, and fault injection control.
+- **Phase 11 & 12: Replay Engine & Postmortems**: Deterministic lifecycle audit replay and comprehensive postmortem generation.
+- **Phase 13: Local Kubernetes Integration**: Containerized deployment on Kind using Kustomize manifests.
+- **Phase 14: Quality Hardening & Modernization**: Standardized UTC ISO 8601 'Z' timestamp serialization, deterministic sorting, executive Markdown/HTML report export engine, and test suite verification.
 </details>

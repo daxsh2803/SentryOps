@@ -13,6 +13,7 @@ router = APIRouter()
 @router.post('/incidents', response_model=IncidentResponse)
 def create_incident(incident: IncidentCreate, db: Session = Depends(get_db)):
     incident_id = f"INC-{uuid.uuid4().hex[:6].upper()}"
+    now = datetime.utcnow()
     db_incident = Incident(
         incident_id=incident_id,
         title=incident.title,
@@ -20,7 +21,9 @@ def create_incident(incident: IncidentCreate, db: Session = Depends(get_db)):
         severity=incident.severity,
         affected_service=incident.affected_service,
         fault_type=incident.fault_type,
-        status=IncidentStatus.DETECTED
+        status=IncidentStatus.DETECTED,
+        created_at=now,
+        updated_at=now
     )
     db.add(db_incident)
     db.commit()
@@ -31,7 +34,7 @@ def create_incident(incident: IncidentCreate, db: Session = Depends(get_db)):
         event_type="INCIDENT_CREATED",
         source="incident-api",
         message="Incident created",
-        timestamp=datetime.utcnow()
+        timestamp=now
     )
     db.add(event)
     db.commit()
@@ -48,7 +51,7 @@ def get_incidents(status: str = None, severity: str = None, affected_service: st
     if affected_service:
         query = query.filter(Incident.affected_service == affected_service)
 
-    return query.all()
+    return query.order_by(Incident.created_at.desc().nullslast(), Incident.id.desc()).all()
 
 @router.get('/incidents/{incident_id}', response_model=IncidentResponse)
 def get_incident(incident_id: str, db: Session = Depends(get_db)):
@@ -227,23 +230,28 @@ def approve_remediation(incident_id: str, payload: ApprovalCreate, db: Session =
         db.add(verification)
 
         if verif_result.verified:
+            now_res = datetime.utcnow()
             incident.status = "RESOLVED"
+            incident.resolved_at = now_res
+            incident.updated_at = now_res
             event3 = IncidentEvent(
                 incident_id=incident.id,
                 event_type="INCIDENT_RESOLVED",
                 source="incident-api",
                 message="Incident verified resolved",
-                timestamp=datetime.utcnow()
+                timestamp=now_res
             )
             db.add(event3)
         else:
+            now_fail = datetime.utcnow()
             incident.status = "INVESTIGATING"
+            incident.updated_at = now_fail
             event3 = IncidentEvent(
                 incident_id=incident.id,
                 event_type="INCIDENT_REINVESTIGATION_REQUIRED",
                 source="incident-api",
                 message="Verification failed, re-investigating",
-                timestamp=datetime.utcnow()
+                timestamp=now_fail
             )
             db.add(event3)
         db.add(incident)

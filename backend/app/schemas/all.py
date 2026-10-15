@@ -1,7 +1,16 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.all import IncidentStatus, Severity
+
+def serialize_utc_datetime(v: Optional[datetime]) -> Optional[str]:
+    if v is None:
+        return None
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=timezone.utc)
+    else:
+        v = v.astimezone(timezone.utc)
+    return v.isoformat().replace('+00:00', 'Z')
 
 class IncidentCreate(BaseModel):
     title: str
@@ -27,6 +36,10 @@ class IncidentResponse(BaseModel):
     class Config:
         from_attributes = True
 
+    @field_serializer('created_at', 'updated_at', 'started_at', 'resolved_at', when_used='always')
+    def serialize_incident_datetimes(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
+
 class IncidentEventResponse(BaseModel):
     event_type: str
     source: Optional[str]
@@ -36,6 +49,10 @@ class IncidentEventResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer('timestamp', when_used='always')
+    def serialize_event_timestamp(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
 
 class EvidenceCreate(BaseModel):
     evidence_type: str
@@ -52,6 +69,10 @@ class EvidenceResponse(EvidenceCreate):
     class Config:
         from_attributes = True
 
+    @field_serializer('timestamp', when_used='always')
+    def serialize_evidence_timestamp(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
+
 class ApprovalCreate(BaseModel):
     reason: Optional[str] = None
 
@@ -64,6 +85,10 @@ class ApprovalResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer('requested_at', 'resolved_at', when_used='always')
+    def serialize_approval_datetimes(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
 
 class AIInvestigationResponse(BaseModel):
     incident_id: str
@@ -82,6 +107,10 @@ class AgentExecutionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer('started_at', 'completed_at', when_used='always')
+    def serialize_execution_datetimes(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
 
 class RemediationProposal(BaseModel):
     action_type: str
@@ -107,6 +136,10 @@ class ActionResult(BaseModel):
     message: str
     timestamp: datetime
 
+    @field_serializer('timestamp', when_used='always')
+    def serialize_action_timestamp(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
+
 class VerificationCheck(BaseModel):
     name: str
     passed: bool
@@ -121,6 +154,10 @@ class VerificationResult(BaseModel):
     evidence_ids: List[str]
     confidence: float
     timestamp: datetime
+
+    @field_serializer('timestamp', when_used='always')
+    def serialize_verification_timestamp(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
 
 class EvaluationCheck(BaseModel):
     name: str
@@ -146,6 +183,10 @@ class EvaluationResult(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer('evaluated_at', when_used='always')
+    def serialize_evaluated_at(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
 
 class ReplayStageSnapshot(BaseModel):
     stage: str
@@ -183,12 +224,20 @@ class IncidentReplayResult(BaseModel):
     historical_actions: List[HistoricalAction]
     replayed_at: datetime
 
+    @field_serializer('replayed_at', when_used='always')
+    def serialize_replayed_at(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
+
 class PostmortemTimelineEntry(BaseModel):
     timestamp: Optional[datetime] = None
     stage: str
     event: str
     source: Optional[str] = None
     message: Optional[str] = None
+
+    @field_serializer('timestamp', when_used='always')
+    def serialize_postmortem_timestamp(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)
 
 class PostmortemSection(BaseModel):
     section: str
@@ -209,3 +258,7 @@ class PostmortemResult(BaseModel):
     timeline: List[PostmortemTimelineEntry]
     sections: List[PostmortemSection]
     lessons: List[str]
+
+    @field_serializer('generated_at', when_used='always')
+    def serialize_generated_at(self, v: Optional[datetime]) -> Optional[str]:
+        return serialize_utc_datetime(v)

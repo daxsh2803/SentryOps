@@ -11,7 +11,7 @@ the database. Recorded remediation actions are treated purely as historical data
 from typing import Any, List, Optional
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -41,7 +41,13 @@ def _value(raw: Any) -> Optional[str]:
 
 
 def _iso(raw: Optional[datetime]) -> Optional[str]:
-    return raw.isoformat() if raw else None
+    if not raw:
+        return None
+    if raw.tzinfo is None:
+        raw = raw.replace(tzinfo=timezone.utc)
+    else:
+        raw = raw.astimezone(timezone.utc)
+    return raw.isoformat().replace("+00:00", "Z")
 
 
 def _target_service(incident: Incident, history: IncidentHistory) -> Optional[str]:

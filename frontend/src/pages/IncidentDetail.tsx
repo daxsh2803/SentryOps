@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { ArrowLeft, Activity, Shield, CheckCircle, XCircle, AlertTriangle, FileText, Database, Server, History, BookOpen, GitCompare } from 'lucide-react';
+import { formatDateTime } from '../utils/date';
+import { generateMarkdownReport, generateHtmlReport, downloadReport } from '../utils/reportGenerator.ts';
+import { ArrowLeft, Activity, Shield, CheckCircle, XCircle, AlertTriangle, FileText, Database, Server, History, BookOpen, GitCompare, Download, Play } from 'lucide-react';
 
 function ServiceHealth({ service }: { service: string }) {
   const [health, setHealth] = useState<any>(null);
@@ -62,6 +64,9 @@ export function IncidentDetail() {
 
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
+  const [investigating, setInvestigating] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [reportSuccessMessage, setReportSuccessMessage] = useState<string | null>(null);
 
   const fetchAll = async () => {
     if (!id) return;
@@ -130,6 +135,57 @@ export function IncidentDetail() {
     }
   };
 
+  const handleInvestigate = async () => {
+    if (!id || investigating) return;
+    setInvestigating(true);
+    setActionFeedback(null);
+    try {
+      await api.investigateIncident(id);
+      setActionFeedback({
+        type: 'success',
+        message: 'AI Investigation completed successfully. Timeline, evidence, RCA, and remediation proposal updated.'
+      });
+      await fetchAll();
+    } catch (err: any) {
+      console.error('Failed to trigger AI investigation:', err);
+      const detail = err.response?.data?.detail || err.message || 'Investigation failed';
+      setActionFeedback({
+        type: 'error',
+        message: `AI Investigation failed: ${typeof detail === 'object' ? JSON.stringify(detail) : detail}`
+      });
+    } finally {
+      setInvestigating(false);
+    }
+  };
+
+  const handleDownloadReport = (format: 'markdown' | 'html') => {
+    if (!incident) return;
+    const reportData = {
+      incident,
+      timeline,
+      evidence,
+      rca,
+      remediation,
+      risk,
+      verification,
+      evaluation,
+      replay,
+      postmortem
+    };
+
+    const idLower = (incident.incident_id || 'incident').toLowerCase();
+    if (format === 'markdown') {
+      const content = generateMarkdownReport(reportData);
+      downloadReport(`sentryops-incident-${idLower}-report.md`, content, 'text/markdown;charset=utf-8');
+      setReportSuccessMessage('Markdown report downloaded.');
+    } else {
+      const content = generateHtmlReport(reportData);
+      downloadReport(`sentryops-incident-${idLower}-report.html`, content, 'text/html;charset=utf-8');
+      setReportSuccessMessage('HTML report downloaded.');
+    }
+    setTimeout(() => setReportSuccessMessage(null), 4000);
+  };
+
   if (loading && !incident) {
     return <div className="center-content"><div className="loading-spinner"></div></div>;
   }
@@ -137,6 +193,8 @@ export function IncidentDetail() {
   if (!incident) {
     return <div>Incident not found.</div>;
   }
+
+  const isDetected = incident.status?.trim().toUpperCase() === 'DETECTED';
 
   return (
     <div>
@@ -153,7 +211,7 @@ export function IncidentDetail() {
               <span className="badge badge-danger">{incident.severity}</span>
             </div>
             <h2 className="text-xl text-secondary mb-4">{incident.title}</h2>
-            <div className="grid-3 mb-4">
+            <div className="grid-4 mb-4">
               <div>
                 <div className="text-sm text-secondary">Service</div>
                 <div className="font-medium">{incident.affected_service || '-'}</div>
@@ -164,12 +222,118 @@ export function IncidentDetail() {
               </div>
               <div>
                 <div className="text-sm text-secondary">Created</div>
-                <div className="font-medium">{new Date(incident.created_at).toLocaleString()}</div>
+                <div className="font-medium">{formatDateTime(incident.created_at)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-secondary">
+                  {incident.resolved_at ? 'Resolved' : 'Last Updated'}
+                </div>
+                <div className="font-medium">
+                  {incident.resolved_at ? formatDateTime(incident.resolved_at) : (incident.updated_at ? formatDateTime(incident.updated_at) : '-')}
+                </div>
               </div>
             </div>
           </div>
+
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              {isDetected && (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleInvestigate}
+                  disabled={investigating}
+                  title="Run multi-agent AI investigation"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <Play size={16} className={investigating ? 'loading-spinner' : ''} />
+                  {investigating ? 'Investigating...' : 'AI Investigate'}
+                </button>
+              )}
+              <button
+                className="btn btn-outline"
+                onClick={() => handleDownloadReport('markdown')}
+                title="Download full incident report in Markdown (.md) format"
+              >
+                <Download size={16} /> Download Report (MD)
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => handleDownloadReport('html')}
+                title="Download formatted standalone executive report in HTML (.html) format"
+              >
+                <FileText size={16} /> Download Report (HTML)
+              </button>
+            </div>
+            {reportSuccessMessage && (
+              <span className="text-xs text-success flex items-center gap-1">
+                <CheckCircle size={14} /> {reportSuccessMessage}
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* DETECTED status callout banner */}
+      {isDetected && (
+        <div
+          className="card mb-6"
+          style={{
+            borderColor: 'var(--primary)',
+            background: 'linear-gradient(145deg, rgba(59, 130, 246, 0.12), var(--bg-card))',
+            padding: '1.25rem'
+          }}
+        >
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Activity size={18} style={{ color: 'var(--primary)' }} />
+                <h3 className="font-bold text-base">Incident Detected — Multi-Agent Investigation Ready</h3>
+              </div>
+              <p className="text-sm text-secondary">
+                Trigger autonomous parallel investigation across Loki error logs, Prometheus telemetry, Jaeger distributed traces, and pgvector runbook retrieval to identify root cause and safety remediation.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary ml-4"
+              onClick={handleInvestigate}
+              disabled={investigating}
+              style={{ minWidth: '170px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+            >
+              <Play size={16} className={investigating ? 'loading-spinner' : ''} />
+              {investigating ? 'Running AI Agents...' : 'Run AI Investigation'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Action Feedback Banner */}
+      {actionFeedback && (
+        <div
+          className="card mb-6"
+          style={{
+            padding: '0.85rem 1.25rem',
+            borderLeft: `4px solid ${actionFeedback.type === 'success' ? 'var(--success)' : 'var(--danger)'}`,
+            background: actionFeedback.type === 'success' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)'
+          }}
+        >
+          <div className="flex justify-between items-center text-sm">
+            <div className="flex items-center gap-2">
+              {actionFeedback.type === 'success' ? (
+                <CheckCircle size={16} style={{ color: 'var(--success)' }} />
+              ) : (
+                <AlertTriangle size={16} style={{ color: 'var(--danger)' }} />
+              )}
+              <span>{actionFeedback.message}</span>
+            </div>
+            <button
+              onClick={() => setActionFeedback(null)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.1rem' }}
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid-2">
         <div className="flex-col gap-4">
@@ -183,7 +347,7 @@ export function IncidentDetail() {
               {timeline.map((ev, i) => (
                 <div key={i} className="timeline-item">
                   <div className="font-medium">{ev.event_type}</div>
-                  <div className="text-sm text-secondary">{new Date(ev.timestamp).toLocaleString()}</div>
+                  <div className="text-sm text-secondary">{formatDateTime(ev.timestamp)}</div>
                   <div className="text-sm mt-1 text-muted">{ev.message}</div>
                 </div>
               ))}
@@ -486,7 +650,7 @@ export function IncidentDetail() {
                         <div key={i} className="timeline-item">
                           <div className="font-medium text-sm">{entry.event}</div>
                           <div className="text-xs text-secondary">
-                            {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'Timestamp unavailable'}
+                            {entry.timestamp ? formatDateTime(entry.timestamp) : 'Timestamp unavailable'}
                           </div>
                           {entry.message && <div className="text-xs mt-1 text-muted">{entry.message}</div>}
                         </div>

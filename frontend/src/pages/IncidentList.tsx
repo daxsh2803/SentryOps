@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Search } from 'lucide-react';
 import { api } from '../api/client';
+import { formatDateTime, compareIncidents } from '../utils/date';
 
 export function IncidentList() {
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -25,7 +26,10 @@ export function IncidentList() {
     return () => clearInterval(interval);
   }, []);
 
-  const filtered = incidents.filter(i =>
+  // Sort by underlying creation timestamp, newest first, with deterministic tie-breaker
+  const sorted = [...incidents].sort(compareIncidents);
+
+  const filtered = sorted.filter(i =>
     i.title.toLowerCase().includes(search.toLowerCase()) ||
     i.incident_id.toLowerCase().includes(search.toLowerCase()) ||
     i.affected_service?.toLowerCase().includes(search.toLowerCase())
@@ -119,7 +123,7 @@ export function IncidentList() {
                     <td>{inc.affected_service || '-'}</td>
                     <td><span className={`badge ${getSeverityBadge(inc.severity)}`}>{inc.severity}</span></td>
                     <td><span className={`badge ${getStatusBadge(inc.status)}`}>{inc.status}</span></td>
-                    <td className="text-secondary text-sm">{new Date(inc.created_at).toLocaleString()}</td>
+                    <td className="text-secondary text-sm">{formatDateTime(inc.created_at)}</td>
                     <td>
                       <Link to={`/incidents/${inc.incident_id}`} className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}>
                         View

@@ -35,7 +35,86 @@
 
 ---
 
-## Slide 4: Multi-Agent Parallel Investigation
+## Slide 4: SentryOps End-to-End System Architecture
+### Implemented Component Topology & Runtime Data Flow
+
+```text
+ ┌────────────────────────────────────────────────────────────────────────────────────────┐
+ │                              OPERATOR / BROWSER INTERFACE                              │
+ │  • React 19 SRE Dashboard (:3080)  • Grafana (:3300)  • Jaeger Distributed Tracing (:16686) │
+ └─────────────┬────────────────────────────────┬───────────────────────────┬─────────────┘
+               │ HTTP / SPA API                 │ Telemetry Queries         │ Trace Inspect
+               ▼                                ▼                           ▼
+ ┌──────────────────────────────┐ ┌────────────────────────────────────────────────────────┐
+ │   FRONTEND NGINX REVERSE     │ │                 OBSERVABILITY ENGINE                   │
+ │   PROXY (Kubernetes Pod)     │ │  • Prometheus (:9090) - /metrics Scrapes               │
+ │  /api         -> backend:8000│ │  • Loki (:3100)       - Structured JSON Log Streams    │
+ │  /faults-api  -> fault:8005  │ │  • Jaeger (:16686)    - OpenTelemetry Distributed Traces│
+ │  /gateway-api -> gateway:8000│ └─────────────────────────────▲──────────────────────────┘
+ └───────┬───────────────┬──────┘                               │ Telemetry Push/Scrape
+         │               │                                      │
+         │ API Calls     │ Client Orders                        │
+         ▼               ▼                                      │
+ ┌───────────────┐ ┌────────────────────────────────────────────┴─────────────────────────┐
+ │ CONTROLLED    │ │            SIMULATED PRODUCTION MICROSERVICES (Kubernetes)            │
+ │ FAULT ENGINE  │ │                                                                      │
+ │  • Fault API  │ │   [API Gateway:8000] ──► [Order Service:8001] ──► [Payment Service]  │
+ │    (:8005)    │ │                                                     (Port 8002)      │
+ │  • Redis      │ │   [Notification Service:8003]    [User Service:8004]         ▲       │
+ │    (:6379)    │ │              ▲                              ▲                │       │
+ └───────┬───────┘ └──────────────┼──────────────────────────────┼────────────────┼───────┘
+         │ Active Fault State     │                              │                │
+         └────────────────────────┴──────────────────────────────┴────────────────┘
+                                  (Microservices poll Redis error/delay injection)
+                                                 ▲
+                                                 │ Investigation & Remediation
+ ┌───────────────────────────────────────────────┴────────────────────────────────────────┐
+ │               SENTRYOPS BACKEND & MULTI-AGENT ENGINE (FastAPI :8000)                   │
+ │                                                                                        │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │                         LangGraph Orchestration Pipeline                         │  │
+ │  │                                                                                  │  │
+ │  │  [IncidentManager] ──► Fan-Out to 6 Parallel Specialized Investigative Agents:   │  │
+ │  │   ├── LogAgent           ──► Queries Loki for error traces & logs                │  │
+ │  │   ├── MetricsAgent       ──► Queries Prometheus HTTP error rate & latency spikes │  │
+ │  │   ├── TraceAgent         ──► Queries Jaeger for downstream error spans           │  │
+ │  │   ├── DeploymentAgent    ──► Queries Fault Injection API for active anomalies    │  │
+ │  │   ├── InfrastructureAgent──► Inspects Kubernetes pod & node health               │  │
+ │  │   └── KnowledgeAgent     ──► Queries pgvector for historical runbooks & incidents │  │
+ │  │                                                                                  │  │
+ │  │  [RCA Agent]             ──► Fan-In Evidence Synthesis + Anti-Hallucination Gate │  │
+ │  │  [Remediation Agent]     ──► Strict Allowlist Selection (SCALE/RESTART/ROLLBACK) │  │
+ │  │  [Deterministic Risk]    ──► Non-LLM Risk Classification (LOW / MEDIUM / HIGH)   │  │
+ │  └──────────────────────────────────────────┬───────────────────────────────────────┘  │
+ │                                             │                                          │
+ │                                             ▼                                          │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │                        Deterministic Safety & Human Gate                         │  │
+ │  │  • PENDING_APPROVAL: Halts execution for MEDIUM / HIGH risk proposals             │  │
+ │  │  • Operator Approval / Rejection API (/incidents/{id}/approve or /reject)        │  │
+ │  │  • Actuation Boundary: In-Memory SIMULATED_INFRA_STATE (0 real cluster mutations)│  │
+ │  │  • Automated Verification: Asserts replica count & service health                │  │
+ │  │  • Lifecycle Audit: Replay Reconstruction & 9-Section Structured Postmortem      │  │
+ │  └──────────────────────────────────────────┬───────────────────────────────────────┘  │
+ │                                             │                                          │
+ │                                             ▼                                          │
+ │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │                     PostgreSQL Database with pgvector (:5432)                    │  │
+ │  │   • incidents        • incident_events  • evidence       • root_causes           │  │
+ │  │   • remediations     • approvals        • executions     • verifications         │  │
+ │  │   • evaluations      • embeddings (semantic runbook search & historical RAG)     │  │
+ │  └──────────────────────────────────────────────────────────────────────────────────┘  │
+ └────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Key Architecture Principles Demonstrated
+1. **Strict Service Separation**: Microservice workloads, telemetry collection, and incident response run as isolated Kubernetes pods within the `sentryops` namespace.
+2. **Deterministic Safety Boundary**: LLM agents are strictly confined to evidence analysis; remediation actuation updates only simulated state, protecting live infrastructure.
+3. **Evidence-Linked Auditability**: Every finding, root cause, remediation proposal, and verification result is persisted in PostgreSQL and linked to real observability artifacts.
+
+---
+
+## Slide 5: Multi-Agent Parallel Investigation
 ### LangGraph Fan-Out / Fan-In Workflow
 
 ```text
@@ -65,7 +144,7 @@
 
 ---
 
-## Slide 5: Deterministic Risk Policy & Approval Gate
+## Slide 6: Deterministic Risk Policy & Approval Gate
 ### Human-in-the-Loop Operational Safety
 
 | Risk Level | Policy Rule | Autonomous Action Allowed? | Operator Action Required |
@@ -80,7 +159,7 @@
 
 ---
 
-## Slide 6: Project Input: What Goes Into SentryOps?
+## Slide 7: Project Input: What Goes Into SentryOps?
 ### Production Telemetry, Incident Signals, System Context & Operational Boundaries
 
 ```text
@@ -116,7 +195,7 @@
 
 ---
 
-## Slide 7: Project Output: What Does SentryOps Produce?
+## Slide 8: Project Output: What Does SentryOps Produce?
 ### Root Cause Diagnosis, Remediation Proposals, Safety Decisions & Verification Outcomes
 
 ```text
@@ -155,7 +234,7 @@
 
 ---
 
-## Slide 8: Observable Telemetry & Operator Dashboard
+## Slide 9: Observable Telemetry & Operator Dashboard
 ### Real-Time Visibility Across the Stack
 
 1. **Grafana Observability Dashboard**:
@@ -171,7 +250,7 @@
 
 ---
 
-## Slide 9: Live Demonstration Walkthrough
+## Slide 10: Live Demonstration Walkthrough
 ### Validated Scenario: `http_500_spike` on `payment-service`
 
 - **Incident Identifier**: `INC-CD90E2`
@@ -192,7 +271,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 10: Execution, Verification & Postmortem
+## Slide 11: Execution, Verification & Postmortem
 ### Deterministic Lifecycle Completion
 
 - **Approval**: Operator submitted approval via dashboard.
@@ -208,7 +287,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 11: Technical Testing & Metric Disclosure
+## Slide 12: Technical Testing & Metric Disclosure
 ### Evidence-Based Quality Assurance
 
 - **Selected Kubernetes-Compatible Suites**: **152 / 152 PASSED (100%)**
@@ -222,7 +301,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 12: Security Architecture & Operational Boundaries
+## Slide 13: Security Architecture & Operational Boundaries
 ### Built-in Hardened Constraints
 
 1. **No Pod Privilege Escalation**:
@@ -238,7 +317,7 @@ Baseline (10/10 OK) ──► Fault Active (0/10 OK, 10/10 500s) ──► Fault
 
 ---
 
-## Slide 13: Summary & Future Roadmap
+## Slide 14: Summary & Future Roadmap
 ### Key Achievements & Next Steps
 
 - **Achievements**:
